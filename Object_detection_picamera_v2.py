@@ -1,4 +1,4 @@
-######## Picamera Object Detection Using Tensorflow Classifier #########
+######## Picamera Home Monitoring Using Tensorflow Classifier and environmental sensors #########
 #
 # Author: Mateusz Kuliberda
 # Date: 4/15/19
@@ -110,11 +110,11 @@ class gatherMeasurements(object):
                 global date_log
                 global cpu_temp
 
-                now = datetime.datetime.now()
-                environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
-
                 while self._running:
-                        
+
+                        now = datetime.datetime.now()
+                        environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
+
                         environment = get_environment_conditions()
                         cpu_temp = get_cpu_temperature()
                         
@@ -273,27 +273,37 @@ if camera_type == 'picamera_env':
                 data_ready = False
                 
         date_log = str(datetime.datetime.now())
-        cv2.putText(frame,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
+
+        overlay = frame.copy()
+        alpha = 0.7 # Transparency factor
+        
+        cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+        cv2.putText(overlay,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+        cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
+        cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
+        cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
+        cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
+        cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
         #cv2.putText(frame,"PM2.5: 23ug/m3",(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
         #cv2.putText(frame,"PM10: 11ug/m3",(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
         
         
         # Class 1 represents human
-        if (classes[0][0] == 1 and scores[0][0] > 0.75):
-            cv2.putText(frame,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+        if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
+            cv2.putText(overlay,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
             cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
             #GPIO.output(relay_pin,True)
         else:
-            cv2.putText(frame,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+            cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
             #GPIO.output(relay_pin,False)
+            
+        if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
+            cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
+            cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
+
+        image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
         # All the results have been drawn on the frame, so it's time to display it.
-        cv2.imshow('Object detector', frame)
+        cv2.imshow('Object detector', image)
 
         t2 = cv2.getTickCount()
         time1 = (t2-t1)/freq
