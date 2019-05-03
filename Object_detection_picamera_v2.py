@@ -115,12 +115,17 @@ class gatherMeasurements(object):
                         now = datetime.datetime.now()
                         environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
 
+                        if not os.path.isfile(environment_log_file):
+                                f = open(environment_log_file, 'a')
+                                f.write('Time,Pressure,Humidity,Temperature,Dew_point' + '\r\n')
+                                f.close()
+
                         environment = get_environment_conditions()
                         cpu_temp = get_cpu_temperature()
                         
                         with open(environment_log_file, 'a') as f2:
                                 date_log = datetime.datetime.now()
-                                s2 = '{:02}'.format(int(date_log.day)) + '{:02}'.format(int(date_log.month)) + '{:02}'.format(int(date_log.year)) + ',' + '{:02}'.format(int(date_log.hour)) + '{:02}'.format(int(date_log.minute)) + '{:02}'.format(int(date_log.second)) + ',' + "{0:.2f}".format(environment[0]) + ',' + "{0:.1f}".format(environment[1]) + ',' + "{0:.1f}".format(environment[2]) + ',' + "{0:.1f}".format(environment[3]) + '\r\n'
+                                s2 = '{:02}'.format(int(date_log.hour)) + ':' + '{:02}'.format(int(date_log.minute)) + ':' + '{:02}'.format(int(date_log.second)) + ',' + "{0:.2f}".format(environment[0]) + ',' + "{0:.1f}".format(environment[1]) + ',' + "{0:.1f}".format(environment[2]) + ',' + "{0:.1f}".format(environment[3]) + '\r\n'
                                 f2.write(s2)
                         data_ready = True
                         time.sleep(30)
