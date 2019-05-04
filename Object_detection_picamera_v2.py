@@ -86,12 +86,12 @@ def get_environment_conditions():
         
         humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
         
-        if humidity >= 0.0 and humidity <= 100.0 and temperature is not None and pressure is not None:
+        if humidity is not None and temperature is not None and pressure is not None:
                 #print('Temp: {0:0.1f} C  Humidity: {1:0.1f} %'.format(temperature, humidity))
                 dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
                 return [pressure, humidity, temperature, dew_point]
         else:
-                return [0.0, 0.0, 0.0, 0.0]
+                return [pressure, 0.0, 0.0, 0.0]
                 #print('Failed to get correct readings')
 
 # Environment conditions gathering and logging thread
@@ -115,20 +115,14 @@ class gatherMeasurements(object):
                         now = datetime.datetime.now()
                         environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
 
-                        if not os.path.isfile(environment_log_file):
-                                f = open(environment_log_file, 'a')
-                                f.write('Time,Pressure,Humidity,Temperature,Dew_point' + '\r\n')
-                                f.close()
-
                         environment = get_environment_conditions()
                         cpu_temp = get_cpu_temperature()
-
-                        if environment[0] != 0.0:
-                                with open(environment_log_file, 'a') as f2:
-                                        date_log = datetime.datetime.now()
-                                        s2 = '{:02}'.format(int(date_log.hour)) + ':' + '{:02}'.format(int(date_log.minute)) + ':' + '{:02}'.format(int(date_log.second)) + ',' + "{0:.2f}".format(environment[0]) + ',' + "{0:.1f}".format(environment[1]) + ',' + "{0:.1f}".format(environment[2]) + ',' + "{0:.1f}".format(environment[3]) + '\r\n'
-                                        f2.write(s2)
-                                data_ready = True
+                        
+                        with open(environment_log_file, 'a') as f2:
+                                date_log = datetime.datetime.now()
+                                s2 = '{:02}'.format(int(date_log.day)) + '{:02}'.format(int(date_log.month)) + '{:02}'.format(int(date_log.year)) + ',' + '{:02}'.format(int(date_log.hour)) + '{:02}'.format(int(date_log.minute)) + '{:02}'.format(int(date_log.second)) + ',' + "{0:.2f}".format(environment[0]) + ',' + "{0:.1f}".format(environment[1]) + ',' + "{0:.1f}".format(environment[2]) + ',' + "{0:.1f}".format(environment[3]) + '\r\n'
+                                f2.write(s2)
+                        data_ready = True
                         time.sleep(30)
 
 
@@ -275,7 +269,7 @@ if camera_type == 'picamera_env':
 
         
         if(data_ready == True):
-                environment_valid = environment
+                if(environment[2] != 0): environment_valid = environment
                 data_ready = False
                 
         date_log = str(datetime.datetime.now())
