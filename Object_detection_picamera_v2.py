@@ -55,6 +55,9 @@ now = datetime.datetime.now()
 global date_log
 global cpu_temp
 
+SCHEDULE_ON = 8
+SCHEDULE_OFF = 22
+
 
 # CPU temperature reading
 def get_cpu_temperature():
@@ -150,10 +153,6 @@ args = parser.parse_args()
 if args.noaddons:
     camera_type = 'picamera_noaddons'
 
-# Turn on cooling
-GPIO.output(fan_pin, GPIO.HIGH)
-
-
 # This is needed since the working directory is the object_detection folder.
 sys.path.append('..')
 
@@ -220,10 +219,13 @@ frame_rate_calc = 1
 freq = cv2.getTickFrequency()
 font = cv2.FONT_HERSHEY_SIMPLEX
 
-# Initialize camera and perform object detection.
-# The camera has to be set up and used differently depending on if it's a
-# Picamera or USB webcam.
+                
 
+# Turn on cooling
+#GPIO.output(fan_pin, GPIO.HIGH)
+print('Press q to exit..')
+
+# Initialize camera and perform object detection.
 ### Picamera with environment conditions and logging ###
 if camera_type == 'picamera_env':
     # Initialize Picamera and grab reference to the raw capture
@@ -249,71 +251,85 @@ if camera_type == 'picamera_env':
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        t1 = cv2.getTickCount()
-        
-        # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
-        # i.e. a single-column array, where each item in the column has the pixel RGB value
         frame = np.copy(frame1.array)
         frame.setflags(write=1)
         frame_expanded = np.expand_dims(frame, axis=0)
 
-        # Perform the actual detection by running the model with the image as input
-        (boxes, scores, classes, num) = sess.run(
-            [detection_boxes, detection_scores, detection_classes, num_detections],
-            feed_dict={image_tensor: frame_expanded})
+        now = datetime.datetime.now()
+        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
-        # Draw the results of the detection (aka 'visualize the results')
-        vis_util.visualize_boxes_and_labels_on_image_array(
-            frame,
-            np.squeeze(boxes),
-            np.squeeze(classes).astype(np.int32),
-            np.squeeze(scores),
-            category_index,
-            use_normalized_coordinates=True,
-            line_thickness=8,
-            min_score_thresh=0.7)
-
-        
-        if(data_ready == True):
-                environment_valid = environment
-                data_ready = False
+                GPIO.output(fan_pin, GPIO.HIGH)
+                t1 = cv2.getTickCount()
                 
-        date_log = str(datetime.datetime.now())
+                # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
+                # i.e. a single-column array, where each item in the column has the pixel RGB value
+                #frame = np.copy(frame1.array)
+                #frame.setflags(write=1)
+                #frame_expanded = np.expand_dims(frame, axis=0)
 
-        overlay = frame.copy()
-        alpha = 0.7 # Transparency factor
-        
-        cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(overlay,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
-        #cv2.putText(frame,"PM2.5: 23ug/m3",(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
-        #cv2.putText(frame,"PM10: 11ug/m3",(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
-        
-        
-        # Class 1 represents human
-        if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
-            cv2.putText(overlay,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-            cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
-            #GPIO.output(relay_pin,True)
+                # Perform the actual detection by running the model with the image as input
+                (boxes, scores, classes, num) = sess.run(
+                    [detection_boxes, detection_scores, detection_classes, num_detections],
+                    feed_dict={image_tensor: frame_expanded})
+
+                # Draw the results of the detection (aka 'visualize the results')
+                vis_util.visualize_boxes_and_labels_on_image_array(
+                    frame,
+                    np.squeeze(boxes),
+                    np.squeeze(classes).astype(np.int32),
+                    np.squeeze(scores),
+                    category_index,
+                    use_normalized_coordinates=True,
+                    line_thickness=8,
+                    min_score_thresh=0.7)
+
+                
+                if(data_ready == True):
+                        environment_valid = environment
+                        data_ready = False
+                        
+                date_log = str(datetime.datetime.now())
+
+                overlay = frame.copy()
+                alpha = 0.7 # Transparency factor
+                
+                cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(frame,"PM2.5: 23ug/m3",(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(frame,"PM10: 11ug/m3",(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
+                
+                
+                # Class 1 represents human
+                if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
+                    cv2.putText(overlay,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                    cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
+                    #GPIO.output(relay_pin,True)
+                else:
+                    cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                    #GPIO.output(relay_pin,False)
+                    
+                if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
+                    cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                    cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
+
+                image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
+                # All the results have been drawn on the frame, so it's time to display it.
+                cv2.imshow('Object detector', image)
+
+                t2 = cv2.getTickCount()
+                time1 = (t2-t1)/freq
+                frame_rate_calc = 1/time1
+
         else:
-            cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-            #GPIO.output(relay_pin,False)
-            
-        if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
-            cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
-            cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
+                cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.imshow('Object detector', frame)
+                GPIO.output(fan_pin, GPIO.LOW)
 
-        image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
-        # All the results have been drawn on the frame, so it's time to display it.
-        cv2.imshow('Object detector', image)
-
-        t2 = cv2.getTickCount()
-        time1 = (t2-t1)/freq
-        frame_rate_calc = 1/time1
 
         # Press 'q' to quit
         if cv2.waitKey(1) == ord('q'):
@@ -337,40 +353,54 @@ if camera_type == 'picamera_noaddons':
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        t1 = cv2.getTickCount()
-        
-        # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
-        # i.e. a single-column array, where each item in the column has the pixel RGB value
         frame = np.copy(frame1.array)
         frame.setflags(write=1)
         frame_expanded = np.expand_dims(frame, axis=0)
 
-        # Perform the actual detection by running the model with the image as input
-        (boxes, scores, classes, num) = sess.run(
-            [detection_boxes, detection_scores, detection_classes, num_detections],
-            feed_dict={image_tensor: frame_expanded})
+        now = datetime.datetime.now()
+        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
-        # Draw the results of the detection (aka 'visualize the results')
-        vis_util.visualize_boxes_and_labels_on_image_array(
-            frame,
-            np.squeeze(boxes),
-            np.squeeze(classes).astype(np.int32),
-            np.squeeze(scores),
-            category_index,
-            use_normalized_coordinates=True,
-            line_thickness=8,
-            min_score_thresh=0.1)
+                GPIO.output(fan_pin, GPIO.HIGH)
+                t1 = cv2.getTickCount()
+                
+                # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
+                # i.e. a single-column array, where each item in the column has the pixel RGB value
+                #frame = np.copy(frame1.array)
+                #frame.setflags(write=1)
+                #frame_expanded = np.expand_dims(frame, axis=0)
 
-        cpu_temp = get_cpu_temperature()
+                # Perform the actual detection by running the model with the image as input
+                (boxes, scores, classes, num) = sess.run(
+                    [detection_boxes, detection_scores, detection_classes, num_detections],
+                    feed_dict={image_tensor: frame_expanded})
 
-        cv2.putText(frame,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-        cv2.putText(frame,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                # Draw the results of the detection (aka 'visualize the results')
+                vis_util.visualize_boxes_and_labels_on_image_array(
+                    frame,
+                    np.squeeze(boxes),
+                    np.squeeze(classes).astype(np.int32),
+                    np.squeeze(scores),
+                    category_index,
+                    use_normalized_coordinates=True,
+                    line_thickness=8,
+                    min_score_thresh=0.1)
+
+                cpu_temp = get_cpu_temperature()
+
+                cv2.putText(frame,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                
+                cv2.imshow('Object detector', frame)
+
+                t2 = cv2.getTickCount()
+                time1 = (t2-t1)/freq
+                frame_rate_calc = 1/time1
+
+        else:
+                cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.imshow('Object detector is OFF', frame)
+                GPIO.output(fan_pin, GPIO.LOW)
         
-        cv2.imshow('Object detector', frame)
-
-        t2 = cv2.getTickCount()
-        time1 = (t2-t1)/freq
-        frame_rate_calc = 1/time1
 
         # Press 'q' to quit
         if cv2.waitKey(1) == ord('q'):
@@ -382,6 +412,7 @@ if camera_type == 'picamera_noaddons':
     GPIO.output(fan_pin, GPIO.LOW)
     GPIO.cleanup()
     camera.close()
+    
 
 
 cv2.destroyAllWindows()
