@@ -1,7 +1,7 @@
 ######## Picamera Home Monitoring Using Tensorflow Classifier and environmental sensors #########
 #
 # Author: Mateusz Kuliberda
-# Date: 4/15/19
+# Date: 7/05/19
 # Description: 
 # This program uses a TensorFlow classifier to perform object detection.
 # It loads the classifier uses it to perform object detection on a Picamera feed.
@@ -36,6 +36,7 @@ import smbus
 import time
 from threading import Thread
 import matplotlib.pyplot as plot
+from pmsA003 import *
 
 
 # Pin control
@@ -49,7 +50,7 @@ GPIO.setup(fan_pin,GPIO.OUT)
 global data_ready
 data_ready = False
 global environment
-environment = [0.0, 0.0, 0.0, 0.0]
+environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 global now
 now = datetime.datetime.now()
 global date_log
@@ -57,6 +58,7 @@ global cpu_temp
 
 SCHEDULE_ON = 8
 SCHEDULE_OFF = 22
+AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 
 # CPU temperature reading
@@ -73,6 +75,13 @@ def get_cpu_temperature():
 
 # Environment conditions reading
 def get_environment_conditions():
+
+        try:
+                aqi_sensor = pmsA003(AQI_SENS_DEV_ADDRESS)
+                pm = aqi_sensor.read_data()
+        except:
+                print('pms7003 sensor error')
+        
         try:
                 bus = smbus.SMBus(1)
                 try:
@@ -92,9 +101,9 @@ def get_environment_conditions():
         if humidity >= 0.0 and humidity <= 100.0 and temperature is not None and pressure is not None:
                 #print('Temp: {0:0.1f} C  Humidity: {1:0.1f} %'.format(temperature, humidity))
                 dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
-                return [pressure, humidity, temperature, dew_point]
+                return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3]]
         else:
-                return [0.0, 0.0, 0.0, 0.0]
+                return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 #print('Failed to get correct readings')
 
 # Environment conditions gathering and logging thread
@@ -120,7 +129,7 @@ class gatherMeasurements(object):
 
                         if not os.path.isfile(environment_log_file):
                                 f = open(environment_log_file, 'a')
-                                f.write('Time,Pressure,Humidity,Temperature,Dew_point' + '\r\n')
+                                f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10' + '\r\n')
                                 f.close()
 
                         environment = get_environment_conditions()
@@ -129,7 +138,9 @@ class gatherMeasurements(object):
                         if environment[0] != 0.0:
                                 with open(environment_log_file, 'a') as f2:
                                         date_log = datetime.datetime.now()
-                                        s2 = '{:02}'.format(int(date_log.hour)) + ':' + '{:02}'.format(int(date_log.minute)) + ':' + '{:02}'.format(int(date_log.second)) + ',' + "{0:.2f}".format(environment[0]) + ',' + "{0:.1f}".format(environment[1]) + ',' + "{0:.1f}".format(environment[2]) + ',' + "{0:.1f}".format(environment[3]) + '\r\n'
+                                        s2 = '{:02}'.format(int(date_log.hour)) + ':' + '{:02}'.format(int(date_log.minute)) + ':' + '{:02}'.format(int(date_log.second)) + \
+                                        ',' + '{0:.2f}'.format(environment[0]) + ',' + '{0:.1f}'.format(environment[1]) + ',' + '{0:.1f}'.format(environment[2]) + ',' + \
+                                        '{0:.1f}'.format(environment[3]) + ',' + '{}'.format(environment[4]) + ',' + '{}'.format(environment[5]) + ',' + '{}'.format(environment[6]) + '\r\n'
                                         f2.write(s2)
                                 data_ready = True
                         time.sleep(30)
@@ -300,9 +311,10 @@ if camera_type == 'picamera_env':
                 cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(frame,"PM2.5: 23ug/m3",(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(frame,"PM10: 11ug/m3",(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
-                
+                cv2.putText(overlay,"PM1: {} ug/m3".format(environment_valid[4]),(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"PM2.5: {} ug/m3".format(environment_valid[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"PM10: {} ug/m3".format(environment_valid[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
+               
                 
                 # Class 1 represents human
                 if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
@@ -387,7 +399,7 @@ if camera_type == 'picamera_noaddons':
 
                 cpu_temp = get_cpu_temperature()
 
-                cv2.putText(frame,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"FPS: {0:.2f}".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(frame,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 
                 cv2.imshow('Object detector', frame)
