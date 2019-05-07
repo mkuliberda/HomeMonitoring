@@ -56,8 +56,8 @@ now = datetime.datetime.now()
 global date_log
 global cpu_temp
 
-SCHEDULE_ON = 8
-SCHEDULE_OFF = 22
+SCHEDULE_ON = 9
+SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 
@@ -98,10 +98,12 @@ def get_environment_conditions():
         
         humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
         
-        if humidity >= 0.0 and humidity <= 100.0 and temperature is not None and pressure is not None:
-                #print('Temp: {0:0.1f} C  Humidity: {1:0.1f} %'.format(temperature, humidity))
-                dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
-                return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3]]
+        if humidity is not None and temperature is not None and pressure is not None:
+                if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
+                        dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
+                        return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3]]
+                else:
+                        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         else:
                 return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
                 #print('Failed to get correct readings')
@@ -338,6 +340,7 @@ if camera_type == 'picamera_env':
                 frame_rate_calc = 1/time1
 
         else:
+                #TODO: implement a way to gatherMeasurementsThread.stop()
                 cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 GPIO.output(fan_pin, GPIO.LOW)
@@ -410,7 +413,7 @@ if camera_type == 'picamera_noaddons':
 
         else:
                 cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.imshow('Object detector is OFF', frame)
+                cv2.imshow('Object detector', frame)
                 GPIO.output(fan_pin, GPIO.LOW)
         
 
