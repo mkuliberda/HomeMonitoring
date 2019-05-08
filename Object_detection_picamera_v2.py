@@ -26,6 +26,9 @@ from picamera import PiCamera
 import tensorflow as tf
 import argparse
 import sys
+# Import utilites
+from utils import label_map_util
+from utils import visualization_utils as vis_util
 import RPi.GPIO as GPIO
 import glob
 import datetime
@@ -40,11 +43,7 @@ from pmsA003 import *
 
 
 # Pin control
-relay_pin=24
-fan_pin=18
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(relay_pin,GPIO.OUT)
-GPIO.setup(fan_pin,GPIO.OUT)
+FAN=18
 
 # Global variables
 global data_ready
@@ -59,6 +58,13 @@ global cpu_temp
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
+
+# Set up camera constants
+IM_WIDTH = 1280
+IM_HEIGHT = 720
+#IM_WIDTH = 640    #Use smaller resolution for
+#IM_HEIGHT = 480   #slightly faster framerate
+
 
 
 # CPU temperature reading
@@ -147,14 +153,29 @@ class gatherMeasurements(object):
                                 data_ready = True
                         time.sleep(30)
 
-
-       
-
-# Set up camera constants
-IM_WIDTH = 1280
-IM_HEIGHT = 720
-#IM_WIDTH = 640    #Use smaller resolution for
-#IM_HEIGHT = 480   #slightly faster framerate
+class cooling(object):
+    def __init__(self,fan_pin):
+        self._is_running = False
+        self.pin = fan_pin
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.pin,GPIO.OUT)
+        #print('setup done')
+        
+    def turnON(self):
+        GPIO.output(self.pin, GPIO.HIGH)
+        self._is_running = True
+        
+    def turnOFF(self):
+        GPIO.output(self.pin, GPIO.LOW)
+        self._is_running = False
+        
+    def getStatus(self):
+        return self._is_running
+    
+    def cleanSys(self):
+        #print('cleaning up')
+        GPIO.cleanup()
+               
 
 # Select type (if user enters --noaddons when calling this script,
 # it will be pure objects detection)
@@ -169,9 +190,7 @@ if args.noaddons:
 # This is needed since the working directory is the object_detection folder.
 sys.path.append('..')
 
-# Import utilites
-from utils import label_map_util
-from utils import visualization_utils as vis_util
+
 
 # Name of the directory containing the object detection module we're using
 MODEL_NAME = 'ssdlite_mobilenet_v2_coco_2018_05_09'
@@ -232,10 +251,8 @@ frame_rate_calc = 1
 freq = cv2.getTickFrequency()
 font = cv2.FONT_HERSHEY_SIMPLEX
 
-                
-
-# Turn on cooling
-#GPIO.output(fan_pin, GPIO.HIGH)
+#Instantiate cooler object
+cooler = cooling(FAN)
 print('Press q to exit..')
 
 # Initialize camera and perform object detection.
@@ -271,7 +288,8 @@ if camera_type == 'picamera_env':
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
-                GPIO.output(fan_pin, GPIO.HIGH)
+                cooler.turnON()
+                #GPIO.output(fan_pin, GPIO.HIGH)
                 t1 = cv2.getTickCount()
                 
                 # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
@@ -343,7 +361,8 @@ if camera_type == 'picamera_env':
                 #TODO: implement a way to gatherMeasurementsThread.stop()
                 cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
-                GPIO.output(fan_pin, GPIO.LOW)
+                cooler.turnOFF()
+                #GPIO.output(fan_pin, GPIO.LOW)
 
 
         # Press 'q' to quit
@@ -352,9 +371,10 @@ if camera_type == 'picamera_env':
 
         rawCapture.truncate(0)
 
-        
-    GPIO.output(fan_pin, GPIO.LOW)
-    GPIO.cleanup()
+    cooler.turnOFF()
+    cooler.cleanSys()
+    #GPIO.output(fan_pin, GPIO.LOW)
+    #GPIO.cleanup()
     measurements.terminate()
     camera.close()
 
@@ -375,7 +395,8 @@ if camera_type == 'picamera_noaddons':
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
-                GPIO.output(fan_pin, GPIO.HIGH)
+                #GPIO.output(fan_pin, GPIO.HIGH)
+                cooler.turnON()
                 t1 = cv2.getTickCount()
                 
                 # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
@@ -414,7 +435,7 @@ if camera_type == 'picamera_noaddons':
         else:
                 cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
-                GPIO.output(fan_pin, GPIO.LOW)
+                cooler.turnOFF()
         
 
         # Press 'q' to quit
@@ -424,8 +445,10 @@ if camera_type == 'picamera_noaddons':
         rawCapture.truncate(0)
 
         
-    GPIO.output(fan_pin, GPIO.LOW)
-    GPIO.cleanup()
+    cooler.turnOFF()
+    cooler.cleanSys()
+    #GPIO.output(fan_pin, GPIO.LOW)
+    #GPIO.cleanup()
     camera.close()
     
 
