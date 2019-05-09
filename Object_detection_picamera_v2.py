@@ -49,14 +49,14 @@ FAN=18
 global data_ready
 data_ready = False
 global environment
-environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
 global now
 now = datetime.datetime.now()
 global date_log
-global cpu_temp
+#global cpu_temp
 
 SCHEDULE_ON = 9
-SCHEDULE_OFF = 16
+SCHEDULE_OFF = 22
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 # Set up camera constants
@@ -67,68 +67,68 @@ IM_HEIGHT = 720
 
 
 
-# CPU temperature reading
-def get_cpu_temperature():
-        temp=0
-        try:
-                temp = os.popen("vcgencmd measure_temp").readline()
-                
-        except:
-                temp = cpu_temp
-                print('Could not read cpu temperature!')
-                
-        return (temp.replace("temp=",""))
-
-# Environment conditions reading
-def get_environment_conditions():
-
-        try:
-                aqi_sensor = pmsA003(AQI_SENS_DEV_ADDRESS)
-                pm = aqi_sensor.read_data()
-        except:
-                print('pms7003 sensor error')
-        
-        try:
-                bus = smbus.SMBus(1)
-                try:
-                        bus.read_byte(0x77)
-                        baro_sensor = BMP085.BMP085()
-                        baro_sensor = BMP085.BMP085(mode=BMP085.BMP085_ULTRAHIGHRES)
-                        pressure = baro_sensor.read_pressure()/100
-                        
-                except:
-                        print('BMP sensor error')
-        except:
-                print('Wrong bus')
-
-        
-        humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
-        
-        if humidity is not None and temperature is not None and pressure is not None:
-                if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
-                        dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
-                        return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3]]
-                else:
-                        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        else:
-                return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-                #print('Failed to get correct readings')
-
 # Environment conditions gathering and logging thread
-class gatherMeasurements(object):
+class measurements(object):
         def __init__(self):
                 self._running = True
+                self.temp = ""
 
         def terminate(self):
                 self._running = False
+
+        # CPU temperature reading
+        def get_cpu_temperature(self):
+                try:
+                        temp = os.popen("vcgencmd measure_temp").readline()
+                        
+                except:
+                        temp = '0'
+                        print('Could not read cpu temperature!')
+                        
+                return (temp.replace("temp=",""))
+
+        # Environment conditions reading
+        def get_environment_conditions(self):
+
+                try:
+                        aqi_sensor = pmsA003(AQI_SENS_DEV_ADDRESS)
+                        pm = aqi_sensor.read_data()
+                except:
+                        print('pms7003 sensor error')
                 
+                try:
+                        bus = smbus.SMBus(1)
+                        try:
+                                bus.read_byte(0x77)
+                                baro_sensor = BMP085.BMP085()
+                                baro_sensor = BMP085.BMP085(mode=BMP085.BMP085_ULTRAHIGHRES)
+                                pressure = baro_sensor.read_pressure()/100
+                                
+                        except:
+                                print('BMP sensor error')
+                except:
+                        print('Wrong bus')
+
+                
+                humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
+                
+                if humidity is not None and temperature is not None and pressure is not None:
+                        if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
+                                dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
+                                return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0']
+                        else:
+                                return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
+                else:
+                        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
+                        #print('Failed to get correct readings')
+
         def run(self):
                 
                 global data_ready
                 global environment
                 global now
                 global date_log
-                global cpu_temp
+                #global cpu_temp
 
                 while self._running:
 
@@ -140,8 +140,8 @@ class gatherMeasurements(object):
                                 f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10' + '\r\n')
                                 f.close()
 
-                        environment = get_environment_conditions()
-                        cpu_temp = get_cpu_temperature()
+                        environment = self.get_environment_conditions()
+                        environment[7] = self.get_cpu_temperature()
 
                         if environment[0] != 0.0:
                                 with open(environment_log_file, 'a') as f2:
@@ -189,7 +189,6 @@ if args.noaddons:
 
 # This is needed since the working directory is the object_detection folder.
 sys.path.append('..')
-
 
 
 # Name of the directory containing the object detection module we're using
@@ -271,11 +270,11 @@ if camera_type == 'picamera_env':
 
     #Start separate thread for environment measurements
     #Create class
-    measurements = gatherMeasurements()
+    collector = measurements()
     #Create Thread
-    gatherMeasurementsThread = Thread(target = measurements.run)
+    measurementsThread = Thread(target = collector.run)
     #Start Thread
-    gatherMeasurementsThread.start()
+    measurementsThread.start()
     
     
 
@@ -325,7 +324,7 @@ if camera_type == 'picamera_env':
                 alpha = 0.7 # Transparency factor
                 
                 cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"CPU: " + environment_valid[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
@@ -373,9 +372,11 @@ if camera_type == 'picamera_env':
 
     cooler.turnOFF()
     cooler.cleanSys()
+    del cooler
     #GPIO.output(fan_pin, GPIO.LOW)
     #GPIO.cleanup()
-    measurements.terminate()
+    collector.terminate()
+    del collector
     camera.close()
 
 if camera_type == 'picamera_noaddons':
@@ -421,10 +422,10 @@ if camera_type == 'picamera_noaddons':
                     line_thickness=8,
                     min_score_thresh=0.1)
 
-                cpu_temp = get_cpu_temperature()
+                #cpu_temp = get_cpu_temperature()
 
                 cv2.putText(frame,"FPS: {0:.2f}".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(frame,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(frame,"CPU: " + cpu_temp,(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 
                 cv2.imshow('Object detector', frame)
 
@@ -447,6 +448,7 @@ if camera_type == 'picamera_noaddons':
         
     cooler.turnOFF()
     cooler.cleanSys()
+    del cooler
     #GPIO.output(fan_pin, GPIO.LOW)
     #GPIO.cleanup()
     camera.close()
