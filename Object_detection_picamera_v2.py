@@ -1,7 +1,7 @@
 ######## Picamera Home Monitoring Using Tensorflow Classifier and environmental sensors #########
 #
 # Author: Mateusz Kuliberda
-# Date: 7/05/19
+# Date: 12/05/19
 # Description: 
 # This program uses a TensorFlow classifier to perform object detection.
 # It loads the classifier uses it to perform object detection on a Picamera feed.
@@ -40,6 +40,9 @@ import time
 from threading import Thread
 import matplotlib.pyplot as plot
 from pmsA003 import *
+import tty
+import termios
+import io
 
 
 # Pin control
@@ -56,7 +59,7 @@ global date_log
 #global cpu_temp
 
 SCHEDULE_ON = 9
-SCHEDULE_OFF = 22
+SCHEDULE_OFF = 14
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 # Set up camera constants
@@ -79,13 +82,16 @@ class measurements(object):
         # CPU temperature reading
         def get_cpu_temperature(self):
                 try:
-                        temp = os.popen("vcgencmd measure_temp").readline()
-                        
+                        f = open("/sys/class/thermal/thermal_zone0/temp", "r")
+                        t = float(f.readline ())
+                        temp = "temp: {0:.1f}C".format(t/1000)
+
+                        #temp = os.popen("vcgencmd measure_temp").readline()
                 except:
                         temp = '0'
                         print('Could not read cpu temperature!')
                         
-                return (temp.replace("temp=",""))
+                return temp #(temp.replace("temp=",""))
 
         # Environment conditions reading
         def get_environment_conditions(self):
@@ -175,6 +181,45 @@ class cooling(object):
     def cleanSys(self):
         #print('cleaning up')
         GPIO.cleanup()
+
+#create breaker thread for exit from camera loop
+print('Press q to exit..')
+
+breakNow = False
+
+def getch():
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+
+        try:
+            #print('try')
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            #print('finally')
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        return ch
+
+def waitForKeyPress():
+
+    global breakNow
+
+    while True:
+        ch = getch()
+
+        if ch == 'q': # Or skip this check and just break
+            breakNow = True
+            break
+        
+#Create breakerThread
+breakerThread = Thread(target = waitForKeyPress)
+#Start Thread
+breakerThread.start()
+
+
+#Instantiate cooler object for fan control
+cooler = cooling(FAN)
                
 
 # Select type (if user enters --noaddons when calling this script,
@@ -250,10 +295,6 @@ frame_rate_calc = 1
 freq = cv2.getTickFrequency()
 font = cv2.FONT_HERSHEY_SIMPLEX
 
-#Instantiate cooler object
-cooler = cooling(FAN)
-print('Press q to exit..')
-
 # Initialize camera and perform object detection.
 ### Picamera with environment conditions and logging ###
 if camera_type == 'picamera_env':
@@ -280,22 +321,21 @@ if camera_type == 'picamera_env':
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        frame = np.copy(frame1.array)
-        frame.setflags(write=1)
-        frame_expanded = np.expand_dims(frame, axis=0)
+        #frame = np.copy(frame1.array)
+        #frame.setflags(write=1)
+        #frame_expanded = np.expand_dims(frame, axis=0)
 
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
                 cooler.turnON()
-                #GPIO.output(fan_pin, GPIO.HIGH)
                 t1 = cv2.getTickCount()
                 
                 # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
                 # i.e. a single-column array, where each item in the column has the pixel RGB value
-                #frame = np.copy(frame1.array)
-                #frame.setflags(write=1)
-                #frame_expanded = np.expand_dims(frame, axis=0)
+                frame = np.copy(frame1.array)
+                frame.setflags(write=1)
+                frame_expanded = np.expand_dims(frame, axis=0)
 
                 # Perform the actual detection by running the model with the image as input
                 (boxes, scores, classes, num) = sess.run(
@@ -324,7 +364,7 @@ if camera_type == 'picamera_env':
                 alpha = 0.7 # Transparency factor
                 
                 cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"CPU: " + environment_valid[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(overlay,"CPU " + environment_valid[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
@@ -339,10 +379,8 @@ if camera_type == 'picamera_env':
                 if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
                     cv2.putText(overlay,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
-                    #GPIO.output(relay_pin,True)
                 else:
                     cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                    #GPIO.output(relay_pin,False)
                     
                 if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
                     cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
@@ -361,20 +399,20 @@ if camera_type == 'picamera_env':
                 cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
-                #GPIO.output(fan_pin, GPIO.LOW)
+
+        if breakNow == True:
+                print('closing, wait few seconds..')
+                break
 
 
         # Press 'q' to quit
         if cv2.waitKey(1) == ord('q'):
-            break
+                print('press q in terminal to exit')
 
         rawCapture.truncate(0)
 
     cooler.turnOFF()
     cooler.cleanSys()
-    del cooler
-    #GPIO.output(fan_pin, GPIO.LOW)
-    #GPIO.cleanup()
     collector.terminate()
     del collector
     camera.close()
@@ -396,7 +434,6 @@ if camera_type == 'picamera_noaddons':
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
-                #GPIO.output(fan_pin, GPIO.HIGH)
                 cooler.turnON()
                 t1 = cv2.getTickCount()
                 
@@ -437,23 +474,23 @@ if camera_type == 'picamera_noaddons':
                 cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
-        
 
+        if breakNow == True:
+                print('closing, wait few seconds..')
+                break
+        
         # Press 'q' to quit
         if cv2.waitKey(1) == ord('q'):
-            break
+                print('press q in terminal to exit')
 
         rawCapture.truncate(0)
 
         
     cooler.turnOFF()
     cooler.cleanSys()
-    del cooler
-    #GPIO.output(fan_pin, GPIO.LOW)
-    #GPIO.cleanup()
     camera.close()
     
 
-
+del cooler
 cv2.destroyAllWindows()
 
