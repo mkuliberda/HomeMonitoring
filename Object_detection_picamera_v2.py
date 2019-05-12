@@ -59,7 +59,7 @@ global date_log
 #global cpu_temp
 
 SCHEDULE_ON = 9
-SCHEDULE_OFF = 14
+SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 # Set up camera constants
@@ -183,7 +183,7 @@ class cooling(object):
         GPIO.cleanup()
 
 #create breaker thread for exit from camera loop
-print('Press q to exit..')
+print('Active hours: ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00. Press q to exit..')
 
 breakNow = False
 
@@ -396,9 +396,13 @@ if camera_type == 'picamera_env':
 
         else:
                 #TODO: implement a way to gatherMeasurementsThread.stop()
-                cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                frame = np.copy(frame1.array)
+                frame.setflags(write=1)
+                frame_expanded = np.expand_dims(frame, axis=0)
+                cv2.putText(frame,"Object detector is OFF, refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
+                time.sleep(15)
 
         if breakNow == True:
                 print('closing, wait few seconds..')
@@ -427,9 +431,9 @@ if camera_type == 'picamera_noaddons':
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        frame = np.copy(frame1.array)
-        frame.setflags(write=1)
-        frame_expanded = np.expand_dims(frame, axis=0)
+        #frame = np.copy(frame1.array)
+        #frame.setflags(write=1)
+        #frame_expanded = np.expand_dims(frame, axis=0)
 
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
@@ -439,9 +443,9 @@ if camera_type == 'picamera_noaddons':
                 
                 # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
                 # i.e. a single-column array, where each item in the column has the pixel RGB value
-                #frame = np.copy(frame1.array)
-                #frame.setflags(write=1)
-                #frame_expanded = np.expand_dims(frame, axis=0)
+                frame = np.copy(frame1.array)
+                frame.setflags(write=1)
+                frame_expanded = np.expand_dims(frame, axis=0)
 
                 # Perform the actual detection by running the model with the image as input
                 (boxes, scores, classes, num) = sess.run(
@@ -471,9 +475,14 @@ if camera_type == 'picamera_noaddons':
                 frame_rate_calc = 1/time1
 
         else:
-                cv2.putText(frame,"Object detector is OFF",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                frame = np.copy(frame1.array)
+                frame.setflags(write=1)
+                frame_expanded = np.expand_dims(frame, axis=0)
+                cv2.putText(frame,"Object detector is OFF, refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
+                time.sleep(15)
+                
 
         if breakNow == True:
                 print('closing, wait few seconds..')
