@@ -126,7 +126,6 @@ class measurements(object):
                                 return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
                 else:
                         return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
-                        #print('Failed to get correct readings')
 
         def run(self):
                 
@@ -183,9 +182,11 @@ class cooling(object):
         GPIO.cleanup()
 
 #create breaker thread for exit from camera loop
-print('Active hours: ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00. Press q to exit..')
+print('Active hours: ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00. Press q to quit..')
+print('Type e to print current environmental conditions')
 
 breakNow = False
+envPrint = False
 
 def getch():
         fd = sys.stdin.fileno()
@@ -204,13 +205,17 @@ def getch():
 def waitForKeyPress():
 
     global breakNow
+    global envPrint
 
     while True:
         ch = getch()
 
-        if ch == 'q': # Or skip this check and just break
-            breakNow = True
-            break
+        if ch == 'q':
+                breakNow = True
+                break
+        if ch == 'e':
+                envPrint = True
+        
         
 #Create breakerThread
 breakerThread = Thread(target = waitForKeyPress)
@@ -325,6 +330,10 @@ if camera_type == 'picamera_env':
         #frame.setflags(write=1)
         #frame_expanded = np.expand_dims(frame, axis=0)
 
+        if(data_ready == True):
+                environment_valid = environment
+                data_ready = False
+
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
 
@@ -352,11 +361,6 @@ if camera_type == 'picamera_env':
                     use_normalized_coordinates=True,
                     line_thickness=8,
                     min_score_thresh=0.7)
-
-                
-                if(data_ready == True):
-                        environment_valid = environment
-                        data_ready = False
                         
                 date_log = str(datetime.datetime.now())
 
@@ -395,7 +399,6 @@ if camera_type == 'picamera_env':
                 frame_rate_calc = 1/time1
 
         else:
-                #TODO: implement a way to gatherMeasurementsThread.stop()
                 frame = np.copy(frame1.array)
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
@@ -405,9 +408,13 @@ if camera_type == 'picamera_env':
                 time.sleep(15)
 
         if breakNow == True:
-                print('closing, wait few seconds..')
+                print('closing, wait few seconds for terminal..')
                 break
 
+        if envPrint == True:
+                print('Pressure, Humidity, Temperature, Dew_point,PM1, PM2.5, PM10, CPU')
+                print(environment_valid)
+                envPrint = False
 
         # Press 'q' to quit
         if cv2.waitKey(1) == ord('q'):
@@ -485,7 +492,7 @@ if camera_type == 'picamera_noaddons':
                 
 
         if breakNow == True:
-                print('closing, wait few seconds..')
+                print('closing, wait few seconds for terminal..')
                 break
         
         # Press 'q' to quit
