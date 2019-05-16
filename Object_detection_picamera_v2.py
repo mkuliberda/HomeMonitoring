@@ -412,7 +412,7 @@ if camera_type == 'picamera_env':
                 break
 
         if envPrint == True:
-                print('Pressure, Humidity, Temperature, Dew_point,PM1, PM2.5, PM10, CPU')
+                print('Pressure, Humidity, Temperature, Dew_point, PM1, PM2.5, PM10, CPU')
                 print(environment_valid)
                 envPrint = False
 
