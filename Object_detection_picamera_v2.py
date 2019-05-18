@@ -52,11 +52,10 @@ FAN=18
 global data_ready
 data_ready = False
 global environment
-environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
+environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
 global now
 now = datetime.datetime.now()
 global date_log
-#global cpu_temp
 
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
@@ -75,6 +74,9 @@ class measurements(object):
         def __init__(self):
                 self._running = True
                 self.temp = ""
+                self.lat = 54.413343
+                self.lon = 18.556917
+                self.alt = 130.0
 
         def terminate(self):
                 self._running = False
@@ -85,13 +87,11 @@ class measurements(object):
                         f = open("/sys/class/thermal/thermal_zone0/temp", "r")
                         t = float(f.readline ())
                         temp = "temp: {0:.1f}C".format(t/1000)
-
-                        #temp = os.popen("vcgencmd measure_temp").readline()
                 except:
                         temp = '0'
                         print('Could not read cpu temperature!')
                         
-                return temp #(temp.replace("temp=",""))
+                return temp
 
         # Environment conditions reading
         def get_environment_conditions(self):
@@ -121,11 +121,11 @@ class measurements(object):
                 if humidity is not None and temperature is not None and pressure is not None:
                         if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
                                 dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
-                                return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0']
+                                return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0', self.lat, self.lon, self.alt]
                         else:
-                                return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
+                                return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
                 else:
-                        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0']
+                        return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
 
         def run(self):
                 
@@ -142,7 +142,7 @@ class measurements(object):
 
                         if not os.path.isfile(environment_log_file):
                                 f = open(environment_log_file, 'a')
-                                f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10' + '\r\n')
+                                f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
                                 f.close()
 
                         environment = self.get_environment_conditions()
@@ -153,7 +153,8 @@ class measurements(object):
                                         date_log = datetime.datetime.now()
                                         s2 = '{:02}'.format(int(date_log.hour)) + ':' + '{:02}'.format(int(date_log.minute)) + ':' + '{:02}'.format(int(date_log.second)) + \
                                         ',' + '{0:.2f}'.format(environment[0]) + ',' + '{0:.1f}'.format(environment[1]) + ',' + '{0:.1f}'.format(environment[2]) + ',' + \
-                                        '{0:.1f}'.format(environment[3]) + ',' + '{}'.format(environment[4]) + ',' + '{}'.format(environment[5]) + ',' + '{}'.format(environment[6]) + '\r\n'
+                                        '{0:.1f}'.format(environment[3]) + ',' + '{}'.format(environment[4]) + ',' + '{}'.format(environment[5]) + ',' + '{}'.format(environment[6]) + \
+                                        ',' + '{}'.format(environment[8]) + ',' + '{}'.format(environment[9]) + ',' + '{}'.format(environment[10]) + '\r\n'
                                         f2.write(s2)
                                 data_ready = True
                         time.sleep(30)
@@ -193,11 +194,9 @@ def getch():
         old_settings = termios.tcgetattr(fd)
 
         try:
-            #print('try')
             tty.setraw(sys.stdin.fileno())
             ch = sys.stdin.read(1)
         finally:
-            #print('finally')
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
         return ch
