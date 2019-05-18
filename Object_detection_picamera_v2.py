@@ -182,8 +182,8 @@ class cooling(object):
         GPIO.cleanup()
 
 #create breaker thread for exit from camera loop
-print('Active hours: ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00. Press q to quit..')
-print('Type e to print current environmental conditions')
+print('Detector active: Monday - Friday, ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00')
+print('Press q to exit. Press e to print current environmental conditions')
 
 breakNow = False
 envPrint = False
@@ -335,7 +335,7 @@ if camera_type == 'picamera_env':
                 data_ready = False
 
         now = datetime.datetime.now()
-        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
+        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6:
 
                 cooler.turnON()
                 t1 = cv2.getTickCount()
@@ -443,7 +443,7 @@ if camera_type == 'picamera_noaddons':
         #frame_expanded = np.expand_dims(frame, axis=0)
 
         now = datetime.datetime.now()
-        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF:
+        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6:
 
                 cooler.turnON()
                 t1 = cv2.getTickCount()
