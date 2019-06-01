@@ -100,6 +100,7 @@ class measurements(object):
                         aqi_sensor = pmsA003(AQI_SENS_DEV_ADDRESS)
                         pm = aqi_sensor.read_data()
                 except:
+                        pm = [0, 0, 0]
                         print('pms7003 sensor error')
                 
                 try:
@@ -111,12 +112,18 @@ class measurements(object):
                                 pressure = baro_sensor.read_pressure()/100
                                 
                         except:
+                                pressure = None
                                 print('BMP sensor error')
                 except:
                         print('Wrong bus')
 
-                
-                humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
+                try:
+                        humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
+                except:
+                        humidity = None
+                        temperature = None
+                        print('DHT sensor error')
+                        
                 
                 if humidity is not None and temperature is not None and pressure is not None:
                         if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
