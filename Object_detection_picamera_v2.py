@@ -43,8 +43,15 @@ from pmsA003 import *
 import tty
 import termios
 import io
+from http.server import BaseHTTPRequestHandler, HTTPServer 
+#import http.server
+import socketserver
 
 
+
+# Server port and address
+PORT=8080
+HOSTNAME = '192.168.0.2'    # TODO: Change this to your Raspberry Pi IP address automatically
 # Pin control
 FAN=18
 
@@ -53,6 +60,7 @@ global data_ready
 data_ready = False
 global environment
 environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
+environment_valid = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
 global now
 now = datetime.datetime.now()
 global date_log
@@ -78,6 +86,7 @@ class measurements(object):
                 self.lon = 18.556917
                 self.alt = 130.0
 
+
         def terminate(self):
                 self._running = False
 
@@ -92,7 +101,7 @@ class measurements(object):
                         print('Could not read cpu temperature!')
                         
                 return temp
-
+        
         # Environment conditions reading
         def get_environment_conditions(self):
 
@@ -142,10 +151,13 @@ class measurements(object):
                 global date_log
                 #global cpu_temp
 
+                #self.start_server()
+
                 while self._running:
 
                         now = datetime.datetime.now()
                         environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
+                        #html_log_file = '/home/pi/Desktop/Environment/index.html'
 
                         if not os.path.isfile(environment_log_file):
                                 f = open(environment_log_file, 'a')
@@ -165,6 +177,7 @@ class measurements(object):
                                         f2.write(s2)
                                 data_ready = True
                         time.sleep(30)
+                #self.stop_server()
 
 class cooling(object):
     def __init__(self,fan_pin):
@@ -188,6 +201,49 @@ class cooling(object):
     def cleanSys(self):
         #print('cleaning up')
         GPIO.cleanup()
+
+class httpserver(BaseHTTPRequestHandler):
+
+        def do_HEAD(self):
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+
+        def _redirect(self, path):
+                self.send_response(303)
+                self.send_header('Content-type', 'text/html')
+                self.send_header('Location', path)
+                self.end_headers()
+
+        def do_GET(self):
+                global environment_valid #very ugly solution, TODO:change this!!!
+                html = '''
+                <html>
+                <body style="width:900px; margin: 20px auto;">
+                <h1>Environment Monitor</h1>
+                <p>Current conditions are: </p></br>
+                <p>{}</p>
+                <form action="/" method="POST">
+                        <input type="submit" name="submit" value="Update">
+                </form>
+                </body>
+                </html>
+                '''
+                
+                self.do_HEAD()
+                self.wfile.write(html.format(environment_valid).encode("utf-8"))
+
+ 
+        def do_POST(self):
+                content_length = int(self.headers['Content-Length'])    # Get the size of data
+                post_data = self.rfile.read(content_length).decode("utf-8")   # Get the data
+                post_data = post_data.split("=")[1]    # Only keep the value
+
+                if post_data == 'Update':
+                        self._redirect('/')    # Redirect back to the root url
+        
+                              
+
 
 #create breaker thread for exit from camera loop
 print('Detector active: Monday - Friday, ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00')
@@ -221,7 +277,9 @@ def waitForKeyPress():
                 break
         if ch == 'e':
                 envPrint = True
-        
+
+
+
         
 #Create breakerThread
 breakerThread = Thread(target = waitForKeyPress)
@@ -230,8 +288,7 @@ breakerThread.start()
 
 
 #Instantiate cooler object for fan control
-cooler = cooling(FAN)
-               
+cooler = cooling(FAN)            
 
 # Select type (if user enters --noaddons when calling this script,
 # it will be pure objects detection)
@@ -327,14 +384,22 @@ if camera_type == 'picamera_env':
     measurementsThread = Thread(target = collector.run)
     #Start Thread
     measurementsThread.start()
-    
+
+    web_dir = os.path.join(os.path.dirname(__file__), '../../../../Desktop/Environment')
+    os.chdir(web_dir)
+    #Start separate thread for environment server
+    #Create class
+    webpage = HTTPServer(('', PORT), httpserver)
+    #Create Thread
+    serverThread = Thread(target = webpage.serve_forever)
+    serverThread.daemon = True
+    #Start Thread
+    serverThread.start()
+    print("Serving at port:",PORT)                         
     
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        #frame = np.copy(frame1.array)
-        #frame.setflags(write=1)
-        #frame_expanded = np.expand_dims(frame, axis=0)
 
         if(data_ready == True):
                 environment_valid = environment
@@ -432,7 +497,9 @@ if camera_type == 'picamera_env':
     cooler.cleanSys()
     collector.terminate()
     del collector
+    del webpage
     camera.close()
+
 
 if camera_type == 'picamera_noaddons':
     # Initialize Picamera and grab reference to the raw capture
@@ -443,10 +510,6 @@ if camera_type == 'picamera_noaddons':
     rawCapture.truncate(0)
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
-
-        #frame = np.copy(frame1.array)
-        #frame.setflags(write=1)
-        #frame_expanded = np.expand_dims(frame, axis=0)
 
         now = datetime.datetime.now()
         if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6:
