@@ -214,7 +214,7 @@ class httpserver(BaseHTTPRequestHandler):
                 html = '''
                 <html>
                 <body style="width:900px; margin: 10px auto;">
-                <h1>Current conditions</h1>
+                <h1>Current conditions
                 <table border=1>
                 <tr>
                 <th>Pressure [hPa]</th>
@@ -249,6 +249,7 @@ class httpserver(BaseHTTPRequestHandler):
                 <th>{}</th>
                 </tr>
                 </table>
+                </h1>
                 <form action="/" method="POST">
                         <input type="submit" name="submit" value="Refresh">
                 </form>
