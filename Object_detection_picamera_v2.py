@@ -149,16 +149,12 @@ class measurements(object):
                 global environment
                 global now
                 global date_log
-                #global cpu_temp
-
-                #self.start_server()
 
                 while self._running:
 
                         now = datetime.datetime.now()
                         environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
-                        #html_log_file = '/home/pi/Desktop/Environment/index.html'
-
+                        
                         if not os.path.isfile(environment_log_file):
                                 f = open(environment_log_file, 'a')
                                 f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
@@ -177,7 +173,6 @@ class measurements(object):
                                         f2.write(s2)
                                 data_ready = True
                         time.sleep(30)
-                #self.stop_server()
 
 class cooling(object):
     def __init__(self,fan_pin):
@@ -185,7 +180,6 @@ class cooling(object):
         self.pin = fan_pin
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.pin,GPIO.OUT)
-        #print('setup done')
         
     def turnON(self):
         GPIO.output(self.pin, GPIO.HIGH)
@@ -199,7 +193,6 @@ class cooling(object):
         return self._is_running
     
     def cleanSys(self):
-        #print('cleaning up')
         GPIO.cleanup()
 
 class httpserver(BaseHTTPRequestHandler):
@@ -216,22 +209,56 @@ class httpserver(BaseHTTPRequestHandler):
                 self.end_headers()
 
         def do_GET(self):
+                
                 global environment_valid #very ugly solution, TODO:change this!!!
                 html = '''
                 <html>
-                <body style="width:900px; margin: 20px auto;">
-                <h1>Environment Monitor</h1>
-                <p>Current conditions are: </p></br>
-                <p>{}</p>
+                <body style="width:900px; margin: 10px auto;">
+                <h1>Current conditions</h1>
+                <table border=1>
+                <tr>
+                <th>Pressure [hPa]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>Humidity [%]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>Air Temperature [C]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>Dew Point [C]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>PM1 [ug/m3]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>PM2.5 [ug/m3]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>PM10 [ug/m3]</th>
+                <th>{}</th>
+                </tr>
+                <tr>
+                <th>CPU </th>
+                <th>{}</th>
+                </tr>
+                </table>
                 <form action="/" method="POST">
-                        <input type="submit" name="submit" value="Update">
+                        <input type="submit" name="submit" value="Refresh">
                 </form>
                 </body>
                 </html>
                 '''
                 
                 self.do_HEAD()
-                self.wfile.write(html.format(environment_valid).encode("utf-8"))
+                self.wfile.write(html.format(environment_valid[0],environment_valid[1],environment_valid[2],environment_valid[3],
+                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7]).encode("utf-8"))
 
  
         def do_POST(self):
@@ -239,7 +266,7 @@ class httpserver(BaseHTTPRequestHandler):
                 post_data = self.rfile.read(content_length).decode("utf-8")   # Get the data
                 post_data = post_data.split("=")[1]    # Only keep the value
 
-                if post_data == 'Update':
+                if post_data == 'Refresh':
                         self._redirect('/')    # Redirect back to the root url
         
                               
