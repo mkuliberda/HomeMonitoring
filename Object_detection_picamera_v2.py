@@ -62,7 +62,7 @@ now = datetime.datetime.now()
 date_log = 0
 
 SCHEDULE_ON = 9
-SCHEDULE_OFF = 17
+SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 # Set up camera constants
