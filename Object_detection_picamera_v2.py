@@ -44,29 +44,25 @@ import tty
 import termios
 import io
 from http.server import BaseHTTPRequestHandler, HTTPServer 
-#import http.server
-import socketserver
 
 
 
 # Server port and address
 PORT=8080
-HOSTNAME = '192.168.0.2'    # TODO: Change this to your Raspberry Pi IP address automatically
+HOSTNAME = '192.168.0.2'    # TODO: Change this to get your Raspberry Pi IP address automatically
+
 # Pin control
 FAN=18
 
 # Global variables
-global data_ready
 data_ready = False
-global environment
 environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
 environment_valid = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
-global now
 now = datetime.datetime.now()
-global date_log
+date_log = 0
 
 SCHEDULE_ON = 9
-SCHEDULE_OFF = 16
+SCHEDULE_OFF = 17
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 # Set up camera constants
