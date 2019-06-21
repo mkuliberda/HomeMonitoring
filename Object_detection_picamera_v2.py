@@ -43,7 +43,8 @@ from pmsA003 import *
 import tty
 import termios
 import io
-from http.server import BaseHTTPRequestHandler, HTTPServer 
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import base64
 
 
 
@@ -192,7 +193,7 @@ class cooling(object):
         GPIO.cleanup()
 
 class httpserver(BaseHTTPRequestHandler):
-
+            
         def do_HEAD(self):
                 self.send_response(200)
                 self.send_header('Content-type', 'text/html')
@@ -207,9 +208,10 @@ class httpserver(BaseHTTPRequestHandler):
         def do_GET(self):
                 
                 global environment_valid #very ugly solution, TODO:change this!!!
+
                 html = '''
                 <html>
-                <body style="width:900px; margin: 10px auto;">
+                <body style="width:350px; margin: 10px auto;">
                 <h1>Current conditions
                 <table border=1>
                 <tr>
@@ -252,10 +254,12 @@ class httpserver(BaseHTTPRequestHandler):
                 </body>
                 </html>
                 '''
-                
+   
+
                 self.do_HEAD()
-                self.wfile.write(html.format(environment_valid[0],environment_valid[1],environment_valid[2],environment_valid[3],
-                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7]).encode("utf-8"))
+                self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
+                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7]).encode("utf-8"))     
+
 
  
         def do_POST(self):
@@ -409,8 +413,8 @@ if camera_type == 'picamera_env':
     #Start Thread
     measurementsThread.start()
 
-    web_dir = os.path.join(os.path.dirname(__file__), '../../../../Desktop/Environment')
-    os.chdir(web_dir)
+    #web_dir = os.path.join(os.path.dirname(__file__), '../../../../Desktop/Environment')
+    #os.chdir(web_dir)
     #Start separate thread for environment server
     #Create class
     webpage = HTTPServer(('', PORT), httpserver)
