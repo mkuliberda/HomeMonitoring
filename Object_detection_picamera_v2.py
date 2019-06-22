@@ -44,7 +44,7 @@ import tty
 import termios
 import io
 from http.server import BaseHTTPRequestHandler, HTTPServer
-import base64
+from subprocess import Popen
 
 
 
@@ -193,6 +193,16 @@ class cooling(object):
         GPIO.cleanup()
 
 class httpserver(BaseHTTPRequestHandler):
+
+        def __init__(self, request, client_address, server):
+                
+                self.html = ["Error loading main.html"]
+                
+                with open("favicon.ico", "rb") as favicon:
+                        self.favicon = favicon.read()
+
+                BaseHTTPRequestHandler.__init__(self, request, client_address, server)
+
             
         def do_HEAD(self):
                 self.send_response(200)
@@ -206,6 +216,23 @@ class httpserver(BaseHTTPRequestHandler):
                 self.end_headers()
 
         def do_GET(self):
+
+                if '/favicon.ico' in self.path:
+                        self.send_response(200)
+                        self.send_header("Content-type", 'image/x-icon')
+                        self.end_headers()
+                        self.wfile.write(self.favicon)
+                        return
+                if '/plots.jpg' in self.path:
+                        self.send_response(200)
+                        self.send_header("Content-type", 'image/jpg')
+                        self.end_headers()
+                        #TODO:Popen('python3 /home/pi/Desktop/Statistics/logs_statistics.py --image')
+                        with open("/home/pi/Desktop/Environment/plots.jpg", "rb") as image_file:
+                                self.wfile.write(image_file.read())
+                        return
+
+
                 
                 global environment_valid #very ugly solution, TODO:change this!!!
 
@@ -251,10 +278,11 @@ class httpserver(BaseHTTPRequestHandler):
                 <form action="/" method="POST">
                         <input type="submit" name="submit" value="Refresh">
                 </form>
+                <p>Today charts</p>
+                <img src="plots.jpg" alt="Plots" width="500" height="500"/>
                 </body>
                 </html>
                 '''
-   
 
                 self.do_HEAD()
                 self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
