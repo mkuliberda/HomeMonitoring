@@ -50,7 +50,6 @@ from subprocess import Popen
 
 # Server port and address
 PORT=8080
-HOSTNAME = '192.168.0.2'    # TODO: Change this to get your Raspberry Pi IP address automatically
 
 # Pin control
 FAN=18
@@ -65,6 +64,12 @@ date_log = 0
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
+
+#Paths
+OBJECTDETECTION_PATH = '/home/pi/tensorflow1/models/research/object_detection'
+STATISTICS_PATH = '/home/pi/Desktop/Statistics'
+ENVIRONMENT_PATH = '/home/pi/Desktop/Environment'
+DETECTIONS_PATH = '/home/pi/Desktop/Detections'
 
 # Set up camera constants
 IM_WIDTH = 1280
@@ -150,7 +155,7 @@ class measurements(object):
                 while self._running:
 
                         now = datetime.datetime.now()
-                        environment_log_file = '/home/pi/Desktop/Environment/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
+                        environment_log_file = ENVIRONMENT_PATH + '/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
                         
                         if not os.path.isfile(environment_log_file):
                                 f = open(environment_log_file, 'a')
@@ -168,6 +173,9 @@ class measurements(object):
                                         '{0:.1f}'.format(environment[3]) + ',' + '{}'.format(environment[4]) + ',' + '{}'.format(environment[5]) + ',' + '{}'.format(environment[6]) + \
                                         ',' + '{}'.format(environment[8]) + ',' + '{}'.format(environment[9]) + ',' + '{}'.format(environment[10]) + '\r\n'
                                         f2.write(s2)
+                                os.chdir(STATISTICS_PATH)
+                                os.system('python3 logs_statistics.py --image')
+                                os.chdir(OBJECTDETECTION_PATH)
                                 data_ready = True
                         time.sleep(30)
 
@@ -197,9 +205,9 @@ class httpserver(BaseHTTPRequestHandler):
         def __init__(self, request, client_address, server):
                 
                 self.html = ["Error loading main.html"]
-                
-                with open("favicon.ico", "rb") as favicon:
-                        self.favicon = favicon.read()
+                #os.chdir(OBJECTDETECTION_PATH)
+                #with open("favicon.ico", "rb") as favicon:
+                #        self.favicon = favicon.read()
 
                 BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
@@ -216,19 +224,19 @@ class httpserver(BaseHTTPRequestHandler):
                 self.end_headers()
 
         def do_GET(self):
+                #print(self.path)
+                #if '/favicon.ico' in self.path:
+                #        self.send_response(200)
+                #        self.send_header("Content-type", 'image/x-icon')
+                #        self.end_headers()
+                #        self.wfile.write(self.favicon)
+                #        return
 
-                if '/favicon.ico' in self.path:
-                        self.send_response(200)
-                        self.send_header("Content-type", 'image/x-icon')
-                        self.end_headers()
-                        self.wfile.write(self.favicon)
-                        return
                 if '/plots.jpg' in self.path:
                         self.send_response(200)
                         self.send_header("Content-type", 'image/jpg')
                         self.end_headers()
-                        #TODO:Popen('python3 /home/pi/Desktop/Statistics/logs_statistics.py --image')
-                        with open("/home/pi/Desktop/Environment/plots.jpg", "rb") as image_file:
+                        with open(ENVIRONMENT_PATH + "/plots.jpg", "rb") as image_file:
                                 self.wfile.write(image_file.read())
                         return
 
@@ -239,7 +247,7 @@ class httpserver(BaseHTTPRequestHandler):
                 html = '''
                 <html>
                 <body style="width:350px; margin: 10px auto;">
-                <h1>Current conditions
+                <h1><center>Current conditions
                 <table border=1>
                 <tr>
                 <th>Pressure [hPa]</th>
@@ -274,11 +282,10 @@ class httpserver(BaseHTTPRequestHandler):
                 <th>{}</th>
                 </tr>
                 </table>
-                </h1>
-                <form action="/" method="POST">
+                </center></h1>
+                <center><form action="/" method="POST">
                         <input type="submit" name="submit" value="Refresh">
-                </form>
-                <p>Today charts</p>
+                </form></center>
                 <img src="plots.jpg" alt="Plots" width="500" height="500"/>
                 </body>
                 </html>
@@ -431,7 +438,6 @@ if camera_type == 'picamera_env':
 
     #Prepare log files
     now = datetime.datetime.now()
-    detections_log_file = '/home/pi/Desktop/Detections/Detection_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
 
     #Start separate thread for environment measurements
     #Create class
@@ -509,13 +515,13 @@ if camera_type == 'picamera_env':
                 # Class 1 represents human
                 if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
                     cv2.putText(overlay,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                    cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
+                    cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
                 else:
                     cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     
                 if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
                     cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                    cv2.imwrite("/home/pi/Desktop/Detections/Detection_Frame_%s.jpg" % date_log, frame)
+                    cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
 
                 image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
                 # All the results have been drawn on the frame, so it's time to display it.
@@ -535,7 +541,7 @@ if camera_type == 'picamera_env':
                 time.sleep(15)
 
         if breakNow == True:
-                print('closing, wait few seconds for terminal..')
+                print('closing, please wait few seconds for terminal..')
                 break
 
         if envPrint == True:
@@ -617,7 +623,7 @@ if camera_type == 'picamera_noaddons':
                 
 
         if breakNow == True:
-                print('closing, wait few seconds for terminal..')
+                print('closing, please wait few seconds for terminal..')
                 break
         
         # Press 'q' to quit
