@@ -63,6 +63,7 @@ date_log = 0
 
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
+DETECTOR_CTRL = 'SCHEDULED'
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 #Paths
@@ -84,9 +85,9 @@ class measurements(object):
         def __init__(self):
                 self._running = True
                 self.temp = ""
-                self.lat = 54.413343
-                self.lon = 18.556917
-                self.alt = 130.0
+                self.lat = 54.390819
+                self.lon = 18.599229
+                self.alt = 50.0
 
 
         def terminate(self):
@@ -205,6 +206,7 @@ class httpserver(BaseHTTPRequestHandler):
         def __init__(self, request, client_address, server):
                 
                 self.html = ["Error loading main.html"]
+                self.detector_control = ''
                 #os.chdir(OBJECTDETECTION_PATH)
                 #with open("favicon.ico", "rb") as favicon:
                 #        self.favicon = favicon.read()
@@ -243,6 +245,9 @@ class httpserver(BaseHTTPRequestHandler):
 
                 
                 global environment_valid #very ugly solution, TODO:change this!!!
+                global DETECTOR_CTRL
+                self.detector_control = DETECTOR_CTRL
+
 
                 html = '''
                 <html>
@@ -281,11 +286,19 @@ class httpserver(BaseHTTPRequestHandler):
                 <th>CPU </th>
                 <th>{}</th>
                 </tr>
+                <tr>
+                <th>Detector Mode</th>
+                <th>{}</th>
+                </tr>
                 </table>
                 </center></h1>
-                <center><form action="/" method="POST">
+                <center>
+                <form action="/" method="POST">
                         <input type="submit" name="submit" value="Refresh">
-                </form></center>
+                <form action="/" method="POST">
+                        <input type="submit" name="submit" value="ToggleDetectorMode">
+                </form>
+                </center>
                 <img src="plots.jpg" alt="Plots" width="500" height="500"/>
                 </body>
                 </html>
@@ -293,7 +306,7 @@ class httpserver(BaseHTTPRequestHandler):
 
                 self.do_HEAD()
                 self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
-                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7]).encode("utf-8"))     
+                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7],self.detector_control).encode("utf-8"))     
 
 
  
@@ -301,9 +314,18 @@ class httpserver(BaseHTTPRequestHandler):
                 content_length = int(self.headers['Content-Length'])    # Get the size of data
                 post_data = self.rfile.read(content_length).decode("utf-8")   # Get the data
                 post_data = post_data.split("=")[1]    # Only keep the value
+                global DETECTOR_CTRL
 
                 if post_data == 'Refresh':
                         self._redirect('/')    # Redirect back to the root url
+                elif post_data == 'ToggleDetectorMode':
+                        if DETECTOR_CTRL == 'SCHEDULED':
+                                DETECTOR_CTRL = 'FORCE OFF'
+                        else:
+                                DETECTOR_CTRL = 'SCHEDULED'
+                        self._redirect('/')    # Redirect back to the root url
+
+                                
         
                               
 
@@ -447,8 +469,6 @@ if camera_type == 'picamera_env':
     #Start Thread
     measurementsThread.start()
 
-    #web_dir = os.path.join(os.path.dirname(__file__), '../../../../Desktop/Environment')
-    #os.chdir(web_dir)
     #Start separate thread for environment server
     #Create class
     webpage = HTTPServer(('', PORT), httpserver)
@@ -468,7 +488,7 @@ if camera_type == 'picamera_env':
                 data_ready = False
 
         now = datetime.datetime.now()
-        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6:
+        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and DETECTOR_CTRL == 'SCHEDULED':
 
                 cooler.turnON()
                 t1 = cv2.getTickCount()
@@ -535,7 +555,7 @@ if camera_type == 'picamera_env':
                 frame = np.copy(frame1.array)
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
-                cv2.putText(frame,"Object detector is OFF, refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
                 time.sleep(15)
