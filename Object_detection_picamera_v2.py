@@ -60,10 +60,12 @@ environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
 environment_valid = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
 now = datetime.datetime.now()
 date_log = 0
+detector_mode = 'SCHEDULED'
+detector_ctrl_index = 0
 
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
-DETECTOR_CTRL = 'SCHEDULED'
+DETECTOR_MODE_OPT = ('SCHEDULED','FORCE_OFF','FORCE_ON')
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 #Paths
@@ -208,7 +210,7 @@ class httpserver(BaseHTTPRequestHandler):
         def __init__(self, request, client_address, server):
                 
                 self.html = ["Error loading main.html"]
-                self.detector_control = ''
+                self.detector_ctrl = ''
                 #os.chdir(OBJECTDETECTION_PATH)
                 #with open("favicon.ico", "rb") as favicon:
                 #        self.favicon = favicon.read()
@@ -263,8 +265,8 @@ class httpserver(BaseHTTPRequestHandler):
 
                 
                 global environment_valid #very ugly solution, TODO:change this!!!
-                global DETECTOR_CTRL
-                self.detector_control = DETECTOR_CTRL
+                global detector_mode
+                self.detector_ctrl = detector_mode
 
 
                 html = '''
@@ -319,11 +321,11 @@ class httpserver(BaseHTTPRequestHandler):
                 </center>
                 <img src="plots.jpg" alt="Plots" width="500" height="500"/>
                 </br>
-                <center><h2>Object Detector</h2></center>
+                <center><h2>Detector preview</h2></center>
                 </br>
                 <img src="Detector.jpg" alt="Detector" width="500" height="360"/>
                 </br>
-                <center><h2>Last person detection</h2></center>
+                <center><h2>Last detection</h2></center>
                 </br>
                 <img src="Detection_latest.jpg" alt="LatestDetection" width="500" height="360"/>
                 </body>
@@ -332,7 +334,7 @@ class httpserver(BaseHTTPRequestHandler):
 
                 self.do_HEAD()
                 self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
-                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7],self.detector_control).encode("utf-8"))     
+                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7],self.detector_ctrl).encode("utf-8"))     
 
 
  
@@ -340,15 +342,18 @@ class httpserver(BaseHTTPRequestHandler):
                 content_length = int(self.headers['Content-Length'])    # Get the size of data
                 post_data = self.rfile.read(content_length).decode("utf-8")   # Get the data
                 post_data = post_data.split("=")[1]    # Only keep the value
-                global DETECTOR_CTRL
+                global detector_mode
+                global detector_ctrl_index  #TODO: this needs to be changed to local variable
+                global DETECTOR_MODE_OPT
 
                 if post_data == 'Refresh':
                         self._redirect('/')    # Redirect back to the root url
+                        
                 elif post_data == 'ToggleDetectorMode':
-                        if DETECTOR_CTRL == 'SCHEDULED':
-                                DETECTOR_CTRL = 'FORCE OFF'
-                        else:
-                                DETECTOR_CTRL = 'SCHEDULED'
+                        if detector_ctrl_index == len(DETECTOR_MODE_OPT):
+                                detector_ctrl_index = 0
+                        detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
+                        detector_ctrl_index += 1
                         self._redirect('/')    # Redirect back to the root url
 
                                 
@@ -514,7 +519,7 @@ if camera_type == 'picamera_env':
                 data_ready = False
 
         now = datetime.datetime.now()
-        if int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and DETECTOR_CTRL == 'SCHEDULED':
+        if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_mode == 'SCHEDULED') or detector_mode == 'FORCE_ON':
 
                 cooler.turnON()
                 t1 = cv2.getTickCount()
