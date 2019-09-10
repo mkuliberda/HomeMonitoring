@@ -78,6 +78,8 @@ IM_HEIGHT = 720
 #IM_WIDTH = 640    #Use smaller resolution for
 #IM_HEIGHT = 480   #slightly faster framerate
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 
 
 # Environment conditions gathering and logging thread
@@ -241,6 +243,22 @@ class httpserver(BaseHTTPRequestHandler):
                         with open(ENVIRONMENT_PATH + "/plots.jpg", "rb") as image_file:
                                 self.wfile.write(image_file.read())
                         return
+                if '/Detector.jpg' in self.path:
+                        self.send_response(200)
+                        self.send_header("Content-type", 'image/jpg')
+                        self.end_headers()
+                        with open(DETECTIONS_PATH + "/Detector.jpg", "rb") as image_file:
+                                self.wfile.write(image_file.read())
+                        return
+
+                if '/Detection_latest.jpg' in self.path:
+                        self.send_response(200)
+                        self.send_header("Content-type", 'image/jpg')
+                        self.end_headers()
+                        with open(DETECTIONS_PATH + "/Detection_latest.jpg", "rb") as image_file:
+                                self.wfile.write(image_file.read())
+                        return
+
 
 
                 
@@ -300,6 +318,14 @@ class httpserver(BaseHTTPRequestHandler):
                 </form>
                 </center>
                 <img src="plots.jpg" alt="Plots" width="500" height="500"/>
+                </br>
+                <center><h2>Object Detector</h2></center>
+                </br>
+                <img src="Detector.jpg" alt="Detector" width="500" height="360"/>
+                </br>
+                <center><h2>Last person detection</h2></center>
+                </br>
+                <img src="Detection_latest.jpg" alt="LatestDetection" width="500" height="360"/>
                 </body>
                 </html>
                 '''
@@ -520,22 +546,23 @@ if camera_type == 'picamera_env':
                 overlay = frame.copy()
                 alpha = 0.7 # Transparency factor
                 
-                cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"CPU " + environment_valid[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"PM1: {} ug/m3".format(environment_valid[4]),(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"PM2.5: {} ug/m3".format(environment_valid[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.putText(overlay,"PM10: {} ug/m3".format(environment_valid[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"CPU " + environment_valid[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"PM1: {} ug/m3".format(environment_valid[4]),(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"PM2.5: {} ug/m3".format(environment_valid[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"PM10: {} ug/m3".format(environment_valid[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
                
                 
                 # Class 1 represents human
                 if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
-                    cv2.putText(overlay,"Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                    cv2.putText(overlay,"Human detected! on " + date_log,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
+                    cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
                 else:
                     cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     
@@ -545,7 +572,8 @@ if camera_type == 'picamera_env':
 
                 image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
                 # All the results have been drawn on the frame, so it's time to display it.
-                cv2.imshow('Object detector', image)
+                cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', image)
+                #cv2.imshow('Object detector', image)
 
                 t2 = cv2.getTickCount()
                 time1 = (t2-t1)/freq
@@ -556,7 +584,8 @@ if camera_type == 'picamera_env':
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
                 cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.imshow('Object detector', frame)
+                cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
+                #cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
                 time.sleep(15)
 
