@@ -8,7 +8,7 @@
 # It draws boxes and scores around the objects of interest in each frame from
 # the Picamera.
 # Additionally it connects to sensors connected to RPi, gathers measurements, saves them
-# in csv file
+# in csv file and serves a webpage to present the data
 
 ## Some of the code is copied from Google's example at
 ## https://github.com/tensorflow/models/blob/master/research/object_detection/object_detection_tutorial.ipynb
