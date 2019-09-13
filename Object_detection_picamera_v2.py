@@ -38,6 +38,7 @@ import Adafruit_BMP.BMP085 as BMP085
 import smbus
 import time
 from threading import Thread
+import threading
 import matplotlib.pyplot as plot
 from pmsA003 import *
 import tty
@@ -81,6 +82,7 @@ IM_HEIGHT = 720
 #IM_HEIGHT = 480   #slightly faster framerate
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+lock = threading.Lock()
 
 
 
@@ -264,77 +266,78 @@ class httpserver(BaseHTTPRequestHandler):
 
 
                 
-                global environment_valid #very ugly solution, TODO:change this!!!
-                global detector_mode
-                self.detector_ctrl = detector_mode
+                global environment_valid, detector_mode, lock #very ugly solution with those globals, TODO:change this!!!
 
+                with lock:
+                        
+                        self.detector_ctrl = detector_mode
 
-                html = '''
-                <html>
-                <body style="width:350px; margin: 10px auto;">
-                <h1><center>Current conditions
-                <table border=1>
-                <tr>
-                <th>Pressure [hPa]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>Humidity [%]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>Air Temperature [C]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>Dew Point [C]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>PM1 [ug/m3]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>PM2.5 [ug/m3]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>PM10 [ug/m3]</th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>CPU </th>
-                <th>{}</th>
-                </tr>
-                <tr>
-                <th>Detector Mode</th>
-                <th>{}</th>
-                </tr>
-                </table>
-                </center></h1>
-                <center>
-                <form action="/" method="POST">
-                        <input type="submit" name="submit" value="Refresh">
-                <form action="/" method="POST">
-                        <input type="submit" name="submit" value="ToggleDetectorMode">
-                </form>
-                </center>
-                <img src="plots.jpg" alt="Plots" width="500" height="500"/>
-                </br>
-                <center><h2>Detector preview</h2></center>
-                </br>
-                <img src="Detector.jpg" alt="Detector" width="500" height="360"/>
-                </br>
-                <center><h2>Last detection</h2></center>
-                </br>
-                <img src="Detection_latest.jpg" alt="LatestDetection" width="500" height="360"/>
-                </body>
-                </html>
-                '''
+                        html = '''
+                        <html>
+                        <body style="width:350px; margin: 10px auto;">
+                        <h1><center>Current conditions
+                        <table border=1>
+                        <tr>
+                        <th>Pressure [hPa]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>Humidity [%]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>Air Temperature [C]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>Dew Point [C]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>PM1 [ug/m3]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>PM2.5 [ug/m3]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>PM10 [ug/m3]</th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>CPU </th>
+                        <th>{}</th>
+                        </tr>
+                        <tr>
+                        <th>Detector Mode</th>
+                        <th>{}</th>
+                        </tr>
+                        </table>
+                        </center></h1>
+                        <center>
+                        <form action="/" method="POST">
+                                <input type="submit" name="submit" value="Refresh">
+                        <form action="/" method="POST">
+                                <input type="submit" name="submit" value="ToggleDetectorMode">
+                        </form>
+                        </center>
+                        <img src="plots.jpg" alt="Plots" width="500" height="500"/>
+                        </br>
+                        <center><h2>Detector preview</h2></center>
+                        </br>
+                        <img src="Detector.jpg" alt="Detector" width="500" height="360"/>
+                        </br>
+                        <center><h2>Last detection</h2></center>
+                        </br>
+                        <img src="Detection_latest.jpg" alt="LatestDetection" width="500" height="360"/>
+                        </body>
+                        </html>
+                        '''
 
-                self.do_HEAD()
-                self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
-                                             environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7],self.detector_ctrl).encode("utf-8"))     
+                        self.do_HEAD()
+                        self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
+                                                     environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7],self.detector_ctrl).encode("utf-8"))     
 
 
  
@@ -350,10 +353,11 @@ class httpserver(BaseHTTPRequestHandler):
                         self._redirect('/')    # Redirect back to the root url
                         
                 elif post_data == 'ToggleDetectorMode':
-                        if detector_ctrl_index == len(DETECTOR_MODE_OPT):
-                                detector_ctrl_index = 0
-                        detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
-                        detector_ctrl_index += 1
+                        with lock:
+                                if detector_ctrl_index == len(DETECTOR_MODE_OPT):
+                                        detector_ctrl_index = 0
+                                detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
+                                detector_ctrl_index += 1
                         self._redirect('/')    # Redirect back to the root url
 
                                 
@@ -515,7 +519,8 @@ if camera_type == 'picamera_env':
 
 
         if(data_ready == True):
-                environment_valid = environment
+                with lock:
+                        environment_valid = environment
                 data_ready = False
 
         now = datetime.datetime.now()
@@ -562,35 +567,36 @@ if camera_type == 'picamera_env':
                 #cv2.putText(overlay,"PM2.5: {} ug/m3".format(environment_valid[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
                 #cv2.putText(overlay,"PM10: {} ug/m3".format(environment_valid[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
                
-                
-                # Class 1 represents human
-                if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
-                    cv2.putText(overlay,"Human detected! on " + date_log,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                    cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
-                    cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
-                else:
-                    cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                    
-                if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
-                    cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                    cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
+                with lock:
+                        # Class 1 represents human
+                        if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
+                                cv2.putText(overlay,"Human detected! on " + date_log,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                                cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
+                                cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
+                        else:
+                                cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                            
+                        if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
+                                cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                                cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
 
-                image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
-                # All the results have been drawn on the frame, so it's time to display it.
-                cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', image)
-                #cv2.imshow('Object detector', image)
+                        image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
+                        # All the results have been drawn on the frame, so it's time to display it.
+                        cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', image)
+                        #cv2.imshow('Object detector', image)
 
                 t2 = cv2.getTickCount()
                 time1 = (t2-t1)/freq
                 frame_rate_calc = 1/time1
 
         else:
-                frame = np.copy(frame1.array)
-                frame.setflags(write=1)
-                frame_expanded = np.expand_dims(frame, axis=0)
-                cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
-                #cv2.imshow('Object detector', frame)
+                with lock:
+                        frame = np.copy(frame1.array)
+                        frame.setflags(write=1)
+                        frame_expanded = np.expand_dims(frame, axis=0)
+                        cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                        cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
+                        #cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
                 time.sleep(15)
 
@@ -600,7 +606,8 @@ if camera_type == 'picamera_env':
 
         if envPrint == True:
                 print('Pressure, Humidity, Temperature, Dew_point, PM1, PM2.5, PM10, CPU, Latitude, Longitude, Altitude')
-                print(environment_valid)
+                with lock:
+                        print(environment_valid)
                 envPrint = False
 
         # Press 'q' to quit
