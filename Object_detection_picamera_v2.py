@@ -180,10 +180,10 @@ class measurements(object):
                                         '{0:.1f}'.format(environment[3]) + ',' + '{}'.format(environment[4]) + ',' + '{}'.format(environment[5]) + ',' + '{}'.format(environment[6]) + \
                                         ',' + '{}'.format(environment[8]) + ',' + '{}'.format(environment[9]) + ',' + '{}'.format(environment[10]) + '\r\n'
                                         f2.write(s2)
-                                os.chdir(STATISTICS_PATH)
-                                os.system('python3 logs_statistics.py --image')
-                                os.chdir(OBJECTDETECTION_PATH)
-                                data_ready = True
+                        os.chdir(STATISTICS_PATH)
+                        os.system('python3 logs_statistics.py --image')
+                        os.chdir(OBJECTDETECTION_PATH)
+                        data_ready = True
                         time.sleep(30)
 
 class cooling(object):
@@ -275,46 +275,46 @@ class httpserver(BaseHTTPRequestHandler):
                         html = '''
                         <html>
                         <body style="width:350px; margin: 10px auto;">
-                        <h1><center>Current conditions
-                        <table border=1>
+                        <h1><center>HOME MONITOR</center></h1>
+                        <h2><center>Current conditions</center></h2>
+                        <table border=1 width="500">
                         <tr>
-                        <th>Pressure [hPa]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">Pressure [hPa]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>Humidity [%]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">Humidity [%]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>Air Temperature [C]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">Air Temperature [C]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>Dew Point [C]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">Dew Point [C]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>PM1 [ug/m3]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">PM1 [ug/m3]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>PM2.5 [ug/m3]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">PM2.5 [ug/m3]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>PM10 [ug/m3]</th>
-                        <th>{}</th>
+                        <td style="text-align:center">PM10 [ug/m3]</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>CPU </th>
-                        <th>{}</th>
+                        <td style="text-align:center">CPU </th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         <tr>
-                        <th>Detector Mode</th>
-                        <th>{}</th>
+                        <td style="text-align:center">Detector Mode</th>
+                        <td style="text-align:center">{}</th>
                         </tr>
                         </table>
-                        </center></h1>
                         <center>
                         <form action="/" method="POST">
                                 <input type="submit" name="submit" value="Refresh">
@@ -354,10 +354,10 @@ class httpserver(BaseHTTPRequestHandler):
                         
                 elif post_data == 'ToggleDetectorMode':
                         with lock:
-                                if detector_ctrl_index == len(DETECTOR_MODE_OPT):
+                                detector_ctrl_index += 1
+                                if detector_ctrl_index >= len(DETECTOR_MODE_OPT):
                                         detector_ctrl_index = 0
                                 detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
-                                detector_ctrl_index += 1
                         self._redirect('/')    # Redirect back to the root url
 
                                 
@@ -501,6 +501,7 @@ if camera_type == 'picamera_env':
     collector = measurements()
     #Create Thread
     measurementsThread = Thread(target = collector.run)
+    measurementsThread.daemon = False
     #Start Thread
     measurementsThread.start()
 
@@ -517,11 +518,10 @@ if camera_type == 'picamera_env':
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-
-        if(data_ready == True):
-                with lock:
+        with lock:    
+                if(data_ready == True):
                         environment_valid = environment
-                data_ready = False
+                        data_ready = False
 
         now = datetime.datetime.now()
         if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_mode == 'SCHEDULED') or detector_mode == 'FORCE_ON':
@@ -567,21 +567,19 @@ if camera_type == 'picamera_env':
                 #cv2.putText(overlay,"PM2.5: {} ug/m3".format(environment_valid[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
                 #cv2.putText(overlay,"PM10: {} ug/m3".format(environment_valid[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
                
-                with lock:
-                        # Class 1 represents human
-                        if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
-                                cv2.putText(overlay,"Human detected! on " + date_log,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+
+                # Class 1 represents human
+                if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
+                        cv2.putText(overlay,"Human detected! on " + date_log,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                        with lock:
                                 cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
                                 cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
-                        else:
-                                cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                            
-                        if ((classes[0][0] == 17 and scores[0][0] > 0.75) or (classes[0][1] == 17 and scores[0][1] > 0.75) or (classes[0][2] == 17 and scores[0][2] > 0.75)):
-                                cv2.putText(overlay,"Cat detected!",(380,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                                cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
-
-                        image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
-                        # All the results have been drawn on the frame, so it's time to display it.
+                else:
+                        cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                    
+                image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
+                # All the results have been drawn on the frame, so it's time to display it.
+                with lock:
                         cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', image)
                         #cv2.imshow('Object detector', image)
 
@@ -590,13 +588,14 @@ if camera_type == 'picamera_env':
                 frame_rate_calc = 1/time1
 
         else:
+                frame = np.copy(frame1.array)
+                frame.setflags(write=1)
+                frame_expanded = np.expand_dims(frame, axis=0)
+                cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 with lock:
-                        frame = np.copy(frame1.array)
-                        frame.setflags(write=1)
-                        frame_expanded = np.expand_dims(frame, axis=0)
-                        cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                         cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
                         #cv2.imshow('Object detector', frame)
+                        
                 cooler.turnOFF()
                 time.sleep(15)
 
@@ -618,9 +617,13 @@ if camera_type == 'picamera_env':
 
     cooler.turnOFF()
     cooler.cleanSys()
+    
     collector.terminate()
+    measurementsThread.join()
     del collector
     del webpage
+    
+    
     camera.close()
 
 
