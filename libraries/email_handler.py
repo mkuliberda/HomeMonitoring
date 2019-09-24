@@ -1,11 +1,8 @@
 
 ##------------------------------------------
-##--- Author: Pradeep Singh
-##--- Blog: https://iotbytes.wordpress.com/programmatically-send-e-mail-from-raspberry-pi-using-python-and-gmail/
-##--- Date: 21st Feb 2017
-##--- Version: 1.0
+##--- Library based on blog: https://iotbytes.wordpress.com/programmatically-send-e-mail-from-raspberry-pi-using-python-and-gmail/
 ##--- Python Ver: 2.7
-##--- Description: This python code will send Plain Text and HTML based emails using Gmail SMTP server
+##--- Description: This python code will send Plain text or HTML-based emails using Gmail SMTP server
 ##------------------------------------------
 
 
@@ -85,6 +82,7 @@ class Class_eMail():
         #Send Mail
         self.session.sendmail(FROM_ADD, [To_Add], Mail_Body.as_string())
 
+        
     def send_Image_Mail(self, To_Add, Subject, image):
         msgRoot = self.initialise_Mail_Body(To_Add, Subject, 'related')
         # Encapsulate the plain and HTML versions of the message body in an
@@ -99,10 +97,6 @@ class Class_eMail():
         msgText = MIMEText('<h1><center>Someone is in the house! Last detection</h1></center><br><img src="cid:image1" width="1024" height="580"/>', 'html')
         msgAlternative.attach(msgText)
 
-        # This example assumes the image is in the current directory
-        #fp = open('Detection_latest.jpg', 'rb')
-        #msgImage = MIMEImage(fp.read())
-        #fp.close()
         msgImage = MIMEImage(image)
 
         # Define the image's ID as referenced above
