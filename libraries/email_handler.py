@@ -13,6 +13,7 @@ import ConfigParser, inspect, os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
 
 
 #Form the absolute path for the settings.ini file
@@ -56,9 +57,9 @@ class Class_eMail():
         self.session.login(USERNAME, PASSWORD)
 
         
-    def initialise_Mail_Body(self, To_Add, Subject):
+    def initialise_Mail_Body(self, To_Add, Subject, multipart_type):
         #Prepare Mail Body
-        Mail_Body = MIMEMultipart()
+        Mail_Body = MIMEMultipart(multipart_type)
         Mail_Body['From'] = FROM_ADD
         Mail_Body['To'] = To_Add
         Mail_Body['Subject'] = Subject
@@ -67,7 +68,7 @@ class Class_eMail():
     
     #Call this to send plain text emails.
     def send_Text_Mail(self, To_Add, Subject, txtMessage):
-        Mail_Body = self.initialise_Mail_Body(To_Add, Subject)
+        Mail_Body = self.initialise_Mail_Body(To_Add, Subject, 'related')
         #Attach Mail Message
         Mail_Msg = MIMEText(txtMessage, 'plain')
         Mail_Body.attach(Mail_Msg)
@@ -77,12 +78,38 @@ class Class_eMail():
     
     #Call this to send HTML emails.
     def send_HTML_Mail(self, To_Add, Subject, htmlMessage):
-        Mail_Body = self.initialise_Mail_Body(To_Add, Subject)
+        Mail_Body = self.initialise_Mail_Body(To_Add, Subject, 'related')
         #Attach Mail Message
         Mail_Msg = MIMEText(htmlMessage, 'html')
         Mail_Body.attach(Mail_Msg)
         #Send Mail
         self.session.sendmail(FROM_ADD, [To_Add], Mail_Body.as_string())
+
+    def send_Image_Mail(self, To_Add, Subject, image):
+        msgRoot = self.initialise_Mail_Body(To_Add, Subject, 'related')
+        # Encapsulate the plain and HTML versions of the message body in an
+        # 'alternative' part, so message agents can decide which they want to display.
+        msgAlternative = MIMEMultipart('alternative')
+        msgRoot.attach(msgAlternative)
+
+        msgText = MIMEText('Someone is in the house')
+        msgRoot.attach(msgText)
+
+        # We reference the image in the IMG SRC attribute by the ID we give it below
+        msgText = MIMEText('<h1><center>Someone is in the house! Last detection</h1></center><br><img src="cid:image1" width="1024" height="580"/>', 'html')
+        msgAlternative.attach(msgText)
+
+        # This example assumes the image is in the current directory
+        #fp = open('Detection_latest.jpg', 'rb')
+        #msgImage = MIMEImage(fp.read())
+        #fp.close()
+        msgImage = MIMEImage(image)
+
+        # Define the image's ID as referenced above
+        msgImage.add_header('Content-ID', '<image1>')
+        msgRoot.attach(msgImage)
+
+        self.session.sendmail(FROM_ADD, [To_Add], msgRoot.as_string())
         
 
     def __del__(self):
