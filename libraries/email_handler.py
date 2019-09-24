@@ -41,8 +41,8 @@ def read_Email_Settings():
         PASSWORD = config.get("EMAIL","PASSWORD")
 
     except Exception as error_msg:
-        print "Error while trying to read SMTP/EMAIL Settings."
-        print {"Error" : str(error_msg)}
+        print ("Error while trying to read SMTP/EMAIL Settings.")
+        print ("Error: " + str(error_msg))
 #=====================================================================================
 
 read_Email_Settings()

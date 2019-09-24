@@ -74,6 +74,7 @@ OBJECTDETECTION_PATH = '/home/pi/tensorflow1/models/research/object_detection'
 STATISTICS_PATH = '/home/pi/Desktop/Statistics'
 ENVIRONMENT_PATH = '/home/pi/Desktop/Environment'
 DETECTIONS_PATH = '/home/pi/Desktop/Detections'
+REPOSITORY_PATH = '/home/pi/Desktop/HomeMonitoring'
 
 # Set up camera constants
 IM_WIDTH = 1280
@@ -360,7 +361,8 @@ class httpserver(BaseHTTPRequestHandler):
                                 detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
                         self._redirect('/')    # Redirect back to the root url
 
-                                
+
+        
         
                               
 
@@ -574,6 +576,10 @@ if camera_type == 'picamera_env':
                         with lock:
                                 cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
                                 cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
+                                os.chdir(REPOSITORY_PATH)
+                                os.system('python notify.py')
+                                os.chdir(OBJECTDETECTION_PATH)
+
                 else:
                         cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     
