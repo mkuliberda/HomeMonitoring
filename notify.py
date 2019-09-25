@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(1, '/home/pi/Desktop/HomeMonitoring/libraries')
 
-
+#TODO: move all configs to JSON
 
 #import the class definition from "email_handler.py" file
 from email_handler import Class_eMail

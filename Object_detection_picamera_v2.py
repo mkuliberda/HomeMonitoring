@@ -47,7 +47,7 @@ import io
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from subprocess import Popen
 
-
+#TODO: move all the configs to JSON
 
 # Server port and address
 PORT=8080
@@ -361,6 +361,28 @@ class httpserver(BaseHTTPRequestHandler):
                                 detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
                         self._redirect('/')    # Redirect back to the root url
 
+class notification(object):
+        def __init__(self):
+                self.__send = False
+                self.__running = True
+
+        def send_notification(self):
+                self.__send = True
+
+        def run(self):
+                while self.__running == True:
+                        if self.__send == True:
+                                os.chdir(REPOSITORY_PATH)
+                                os.system('python notify.py')
+                                os.chdir(OBJECTDETECTION_PATH)
+                                self.__send = False
+                        time.sleep(10)
+                
+        def terminate(self):
+                self.__running = False
+
+
+
 
         
         
@@ -515,8 +537,13 @@ if camera_type == 'picamera_env':
     serverThread.daemon = True
     #Start Thread
     serverThread.start()
-    print("Serving at port:",PORT)                         
-    
+    print("Serving at port:",PORT) 
+
+    #Start separate thread for email notifications
+    email_notification = notification()
+    notificationThread = Thread(target = email_notification.run)
+    notificationThread.start()
+        
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
@@ -576,9 +603,7 @@ if camera_type == 'picamera_env':
                         with lock:
                                 cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
                                 cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
-                                os.chdir(REPOSITORY_PATH)
-                                os.system('python notify.py')
-                                os.chdir(OBJECTDETECTION_PATH)
+                                email_notification.send_notification()
 
                 else:
                         cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
@@ -626,8 +651,11 @@ if camera_type == 'picamera_env':
     
     collector.terminate()
     measurementsThread.join()
+    email_notification.terminate()
+    notificationThread.join()
     del collector
     del webpage
+    del email_notification
     
     
     camera.close()
