@@ -714,7 +714,7 @@ if camera_type == 'picamera_noaddons':
                 frame = np.copy(frame1.array)
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
-                cv2.putText(frame,"Object detector is OFF, refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"Detector DISARMED. Refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
                 time.sleep(15)
