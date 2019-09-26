@@ -17,6 +17,7 @@ email = Class_eMail()
 #email.send_HTML_Mail(To_Email_ID, 'Home Monitoring', '<html><h1>Someone is in the house</h1></html>')
 fp = open(DETECTIONS_PATH + 'Detection_latest.jpg', 'rb')
 email.send_Image_Mail(To_Email_ID, 'Home Monitoring', fp.read())
+print("email sent")
 fp.close()
  
 del email

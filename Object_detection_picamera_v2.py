@@ -606,7 +606,7 @@ if camera_type == 'picamera_env':
                                 email_notification.send_notification()
 
                 else:
-                        cv2.putText(overlay,"No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                        cv2.putText(overlay,"Detector ARMED. No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     
                 image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
                 # All the results have been drawn on the frame, so it's time to display it.
@@ -622,7 +622,7 @@ if camera_type == 'picamera_env':
                 frame = np.copy(frame1.array)
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
-                cv2.putText(frame,"Object detector is OFF, just refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"Detector DISARMED. Refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 with lock:
                         cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
                         #cv2.imshow('Object detector', frame)
