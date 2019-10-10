@@ -24,6 +24,12 @@ class pmsA003():
 
     def verify_data(self):
         #TODO: better data validity checking, e.g. checksum
+        #checksum = ord(_frame[-2]) << 8 | ord(_frame[-1])
+        #calculated_checksum = HEAD_FIRST + HEAD_SECOND
+        #for field in _frame[:-2]:
+        #calculated_checksum += ord(field)
+        #return checksum == calculated_checksum
+
         if not self.data:
             return False
         return True
