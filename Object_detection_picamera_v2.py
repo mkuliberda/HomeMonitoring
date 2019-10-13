@@ -146,6 +146,7 @@ class measurements(object):
                 
                 if humidity is not None and temperature is not None and pressure is not None:
                         if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
+                                temperature = temperature - 1 #account for sensor and rpi self heating by approx 1C
                                 dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
                                 return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0', self.lat, self.lon, self.alt]
                         else:
