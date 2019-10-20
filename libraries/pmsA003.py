@@ -10,7 +10,7 @@ class pmsA003():
         self.arraysize = 32
         self.data = bytearray(self.arraysize)
         self.pm_valid = [False, False, False]
-        print(self.data)
+        
     def __exit__(self, exc_type, exc_value, traceback):
         self.serial.close()
 
@@ -59,7 +59,6 @@ class pmsA003():
             s2 = self.serial.read(1)
             if s1 == b'\x42' and s2 == b'\x4d':
                 payload = self.serial.read(30)
-                #print(s1,s2)
                 self.data = bytearray(s1 + s2 + payload)
                 if self.verify_data():
                     if data_type == 'dict':
