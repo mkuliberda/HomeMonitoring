@@ -9,6 +9,7 @@ class pmsA003():
         self.serial = serial.Serial(dev, baudrate=9600, timeout=1)
         self.arraysize = 32
         self.data = bytearray(self.arraysize)
+        self.pm_valid = [False, False, False]
         print(self.data)
     def __exit__(self, exc_type, exc_value, traceback):
         self.serial.close()
@@ -25,17 +26,32 @@ class pmsA003():
         self.serial.write(ary)
 
     def verify_data(self):
-        #TODO: better data validity checking, e.g. checksum
-        #checksum = ord(_frame[-2]) << 8 | ord(_frame[-1])
-        #calculated_checksum = HEAD_FIRST + HEAD_SECOND
-        #for field in _frame[:-2]:
-        #calculated_checksum += ord(field)
-        #return checksum == calculated_checksum
 
-        if not self.data:
+        crc = self.data[30] * 256 + self.data[31]
+        crc_calc = 0
+        for i in range(len(self.data)-2):
+            crc_calc += self.data[i]
+        
+        if crc == crc_calc:
+            
+            self.pm_valid = [True, True, True]
+            pm = [0,0,0]
+            
+            pm[0] = self.data[10] * 256 + self.data[11]
+            pm[1] = self.data[12] * 256 + self.data[13]
+            pm[2] = self.data[14] * 256 + self.data[15]
+
+            if pm[0] < 0 or pm[0] > 500:
+                self.pm_valid[0] = False
+            if pm[1] < 0 or pm[1] > 500:
+                self.pm_valid[1] = False
+            if pm[2] < 0 or pm[2] > 500:
+                self.pm_valid[2] = False
+            
+            return True
+        
+        else:
             return False
-        return True
-
 
     def read_data(self,data_type = 'list'):
         while True:
@@ -52,24 +68,42 @@ class pmsA003():
                         return self._PMdata_list()
                 else:
                     if data_type == 'dict':
-                        return {'time': 0, 'pm1.0': 0, 'pm2.5' : 0, 'pm10.0' : 0}
+                        return {'time': datetime.datetime.now(), 'pm1.0': 0, 'pm2.5' : 0, 'pm10.0' : 0}
                     if data_type == 'list':
-                        return [0, 0, 0, 0]
+                        return [datetime.datetime.now(), 0, 0, 0]
 
     def _PMdata_dict(self):
+
         d = {}
+
         d['time'] = datetime.datetime.now()
-        d['pm1.0'] = self.data[10] * 256 + self.data[11]
-        d['pm2.5'] = self.data[12] * 256 + self.data[13]
-        d['pm10.0'] = self.data[14] * 256 + self.data[15]
+
+        if self.pm_valid[0] == True:
+            d['pm1.0'] = self.data[10] * 256 + self.data[11]
+
+        if self.pm_valid[1] == True:
+            d['pm2.5'] = self.data[12] * 256 + self.data[13]
+
+        if self.pm_valid[2] == True:
+            d['pm10.0'] = self.data[14] * 256 + self.data[15]
+
         return d
     
     def _PMdata_list(self):
+
         d = [0,0,0,0]
+
         d[0] = datetime.datetime.now()
-        d[1] = self.data[10] * 256 + self.data[11]
-        d[2] = self.data[12] * 256 + self.data[13]
-        d[3] = self.data[14] * 256 + self.data[15]
+
+        if self.pm_valid[0] == True:
+            d[1] = self.data[10] * 256 + self.data[11]
+        
+        if self.pm_valid[1] == True:
+            d[2] = self.data[12] * 256 + self.data[13]
+        
+        if self.pm_valid[2] == True:
+            d[3] = self.data[14] * 256 + self.data[15]
+
         return d
 
 
@@ -78,7 +112,6 @@ class pmsA003():
 
 #while True:
 #    if __name__ == '__main__':
-        
 #        PM = con.read_data()
 #        print(PM)
 
