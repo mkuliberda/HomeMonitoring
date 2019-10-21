@@ -6,7 +6,7 @@ import binascii
 
 class pmsA003():
     def __init__(self, dev):
-        self.serial = serial.Serial(dev, baudrate=9600, timeout=1)
+        self.serial = serial.Serial(dev, baudrate=9600, timeout=3)
         self.arraysize = 32
         self.data = bytearray(self.arraysize)
         self.pm_valid = [False, False, False]
