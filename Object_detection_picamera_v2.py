@@ -113,13 +113,13 @@ class measurements(object):
                 return temp
         
         # Environment conditions reading
-        def get_environment_conditions(self):
+        def get_environmental_conditions(self):
 
                 try:
                         aqi_sensor = pmsA003(AQI_SENS_DEV_ADDRESS)
                         pm = aqi_sensor.read_data()
                 except:
-                        pm = [0, 0, 0]
+                        pm = [None, None, None, None]
                         print('pms7003 sensor error')
                 
                 try:
@@ -144,7 +144,7 @@ class measurements(object):
                         print('DHT sensor error')
                         
                 
-                if humidity is not None and temperature is not None and pressure is not None:
+                if humidity is not None and temperature is not None and pressure is not None and pm[1] is not None and pm[2] is not None and pm[3] is not None:
                         if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
                                 dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
                                 return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0', self.lat, self.lon, self.alt]
@@ -170,7 +170,7 @@ class measurements(object):
                                 f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
                                 f.close()
 
-                        environment = self.get_environment_conditions()
+                        environment = self.get_environmental_conditions()
                         environment[7] = self.get_cpu_temperature()
 
                         if environment[0] != 0.0:
