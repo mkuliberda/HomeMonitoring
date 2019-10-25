@@ -39,12 +39,12 @@ import smbus
 import time
 from threading import Thread
 import threading
-import matplotlib.pyplot as plot
 from pmsA003 import *
 import tty
 import termios
 import io
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import http.server
+import socketserver
 from subprocess import Popen
 
 #TODO: move all the configs to JSON
@@ -55,18 +55,15 @@ PORT=8080
 # Pin control
 FAN=18
 
+# Refresh rates
+DISARMED_REFRESH_RATE_S = 10
+
 # Global variables
-data_ready = False
-environment = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
-environment_valid = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
-now = datetime.datetime.now()
-date_log = 0
-detector_mode = 'SCHEDULED'
-detector_ctrl_index = 0
+validated_data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
+detector_ctrl = {'mode' : 'SCHEDULED', 'index' : 0, 'armed': False}
 
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
-DETECTOR_MODE_OPT = ('SCHEDULED','FORCE_OFF','FORCE_ON')
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
 
 #Paths
@@ -86,19 +83,30 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 lock = threading.Lock()
 
 
-
 # Environment conditions gathering and logging thread
-class measurements(object):
+class measurementsThread(threading.Thread):
         def __init__(self):
+
+                threading.Thread.__init__(self)
+
                 self._running = True
-                self.temp = ""
                 self.lat = 54.390819
                 self.lon = 18.599229
                 self.alt = 50.0
-
+                self._data_ready = False
+                self.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]           
 
         def terminate(self):
                 self._running = False
+
+        def setConsumed(self):
+                self._data_ready = False
+        
+        def checkDataAvbl(self):
+                return self._data_ready
+        
+        def getAllData(self):
+                return self.data
 
         # CPU temperature reading
         def get_cpu_temperature(self):
@@ -114,12 +122,17 @@ class measurements(object):
         
         # Environment conditions reading
         def get_environmental_conditions(self):
-
+                
+                pm = [None, None, None, None]
+                pressure = None
+                humidity = None
+                temperature = None
+                dew_point = None  
+ 
                 try:
                         aqi_sensor = pmsA003(AQI_SENS_DEV_ADDRESS)
                         pm = aqi_sensor.read_data()
                 except:
-                        pm = [None, None, None, None]
                         print('pms7003 sensor error')
                 
                 try:
@@ -131,7 +144,6 @@ class measurements(object):
                                 pressure = baro_sensor.read_pressure()/100
                                 
                         except:
-                                pressure = None
                                 print('BMP sensor error')
                 except:
                         print('Wrong bus')
@@ -139,8 +151,6 @@ class measurements(object):
                 try:
                         humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
                 except:
-                        humidity = None
-                        temperature = None
                         print('DHT sensor error')
                         
                 
@@ -154,11 +164,6 @@ class measurements(object):
                         return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
 
         def run(self):
-                
-                global data_ready
-                global environment
-                global now
-                global date_log
 
                 while self._running:
 
@@ -170,21 +175,22 @@ class measurements(object):
                                 f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
                                 f.close()
 
-                        environment = self.get_environmental_conditions()
-                        environment[7] = self.get_cpu_temperature()
+                        self.data = self.get_environmental_conditions()
+                        self.data[7] = self.get_cpu_temperature()
 
-                        if environment[0] != 0.0:
+                        if self.data[0] != 0.0:
                                 with open(environment_log_file, 'a') as f2:
-                                        date_log = datetime.datetime.now()
-                                        s2 = '{:02}'.format(int(date_log.hour)) + ':' + '{:02}'.format(int(date_log.minute)) + ':' + '{:02}'.format(int(date_log.second)) + \
-                                        ',' + '{0:.2f}'.format(environment[0]) + ',' + '{0:.1f}'.format(environment[1]) + ',' + '{0:.1f}'.format(environment[2]) + ',' + \
-                                        '{0:.1f}'.format(environment[3]) + ',' + '{}'.format(environment[4]) + ',' + '{}'.format(environment[5]) + ',' + '{}'.format(environment[6]) + \
-                                        ',' + '{}'.format(environment[8]) + ',' + '{}'.format(environment[9]) + ',' + '{}'.format(environment[10]) + '\r\n'
-                                        f2.write(s2)
+                                        s = '{:02}'.format(int(now.hour)) + ':' + '{:02}'.format(int(now.minute)) + ':' + '{:02}'.format(int(now.second)) + \
+                                        ',' + '{0:.2f}'.format(self.data[0]) + ',' + '{0:.1f}'.format(self.data[1]) + ',' + '{0:.1f}'.format(self.data[2]) + ',' + \
+                                        '{0:.1f}'.format(self.data[3]) + ',' + '{}'.format(self.data[4]) + ',' + '{}'.format(self.data[5]) + ',' + '{}'.format(self.data[6]) + \
+                                        ',' + '{}'.format(self.data[8]) + ',' + '{}'.format(self.data[9]) + ',' + '{}'.format(self.data[10]) + '\r\n'
+                                        f2.write(s)
+
                         os.chdir(STATISTICS_PATH)
                         os.system('python3 logs_statistics.py --image')
                         os.chdir(OBJECTDETECTION_PATH)
-                        data_ready = True
+
+                        self._data_ready = True
                         time.sleep(30)
 
 class cooling(object):
@@ -208,18 +214,31 @@ class cooling(object):
     def cleanSys(self):
         GPIO.cleanup()
 
-class httpserver(BaseHTTPRequestHandler):
+def startServerThread():
+	
+	serverInstance = ThreadedHTTPServer(('0.0.0.0', PORT), MyRequestHandler)
+	print('Starting server...')
+	
+	serverThread = threading.Thread(target = serverInstance.serve_forever)
+	serverThread.deamon = False
+	serverThread.start()
 
-        def __init__(self, request, client_address, server):
-                
-                self.html = ["Error loading main.html"]
-                self.detector_ctrl = ''
-                #os.chdir(OBJECTDETECTION_PATH)
-                #with open("favicon.ico", "rb") as favicon:
-                #        self.favicon = favicon.read()
+	return serverInstance
 
-                BaseHTTPRequestHandler.__init__(self, request, client_address, server)
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """Handle requests in a separate thread."""
 
+
+class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
+
+        #def __init__(self, request, client_address, server):
+                #self.detector_ctrl_index = 0
+                #print(self.detector_ctrl_index)
+                #http.server.SimpleHTTPRequestHandler.__init__(self, request, client_address, server)
+                 #self.data = data_list
+                 #os.chdir(OBJECTDETECTION_PATH)
+                 #with open("favicon.ico", "rb") as favicon:
+                 #        self.favicon = favicon.read()
             
         def do_HEAD(self):
                 self.send_response(200)
@@ -248,6 +267,7 @@ class httpserver(BaseHTTPRequestHandler):
                         with open(ENVIRONMENT_PATH + "/plots.jpg", "rb") as image_file:
                                 self.wfile.write(image_file.read())
                         return
+
                 if '/Detector.jpg' in self.path:
                         self.send_response(200)
                         self.send_header("Content-type", 'image/jpg')
@@ -264,134 +284,131 @@ class httpserver(BaseHTTPRequestHandler):
                                 self.wfile.write(image_file.read())
                         return
 
+                      
+                html = '''
+                <html>
+                <body style="width:350px; margin: 10px auto;">
+                <h1><center>HOME MONITOR</center></h1>
+                <h2><center>Current conditions</center></h2>
+                <table border=1 width="500">
+                <tr>
+                <td style="text-align:center">Pressure [hPa]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">Humidity [%]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">Air Temperature [C]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">Dew Point [C]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">PM1 [ug/m3]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">PM2.5 [ug/m3]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">PM10 [ug/m3]</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">CPU </th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                <tr>
+                <td style="text-align:center">Detector Mode</th>
+                <td style="text-align:center">{}</th>
+                </tr>
+                </table>
+                <center>
+                <form action="/" method="POST">
+                        <input type="submit" name="submit" value="Refresh">
+                <form action="/" method="POST">
+                        <input type="submit" name="submit" value="ToggleDetectorMode">
+                </form>
+                </center>
+                <img src="plots.jpg" alt="Plots" width="500" height="500"/>
+                </br>
+                <center><h2>Detector preview</h2></center>
+                </br>
+                <img src="Detector.jpg" alt="Detector" width="500" height="360"/>
+                </br>
+                <center><h2>Last detection</h2></center>
+                </br>
+                <img src="Detection_latest.jpg" alt="LatestDetection" width="500" height="360"/>
+                </body>
+                </html>
+                '''
+                global validated_data, detector_ctrl
+                self.data = validated_data
 
-
-                
-                global environment_valid, detector_mode, lock #very ugly solution with those globals, TODO:change this!!!
-
-                with lock:
-                        
-                        self.detector_ctrl = detector_mode
-
-                        html = '''
-                        <html>
-                        <body style="width:350px; margin: 10px auto;">
-                        <h1><center>HOME MONITOR</center></h1>
-                        <h2><center>Current conditions</center></h2>
-                        <table border=1 width="500">
-                        <tr>
-                        <td style="text-align:center">Pressure [hPa]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">Humidity [%]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">Air Temperature [C]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">Dew Point [C]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">PM1 [ug/m3]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">PM2.5 [ug/m3]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">PM10 [ug/m3]</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">CPU </th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        <tr>
-                        <td style="text-align:center">Detector Mode</th>
-                        <td style="text-align:center">{}</th>
-                        </tr>
-                        </table>
-                        <center>
-                        <form action="/" method="POST">
-                                <input type="submit" name="submit" value="Refresh">
-                        <form action="/" method="POST">
-                                <input type="submit" name="submit" value="ToggleDetectorMode">
-                        </form>
-                        </center>
-                        <img src="plots.jpg" alt="Plots" width="500" height="500"/>
-                        </br>
-                        <center><h2>Detector preview</h2></center>
-                        </br>
-                        <img src="Detector.jpg" alt="Detector" width="500" height="360"/>
-                        </br>
-                        <center><h2>Last detection</h2></center>
-                        </br>
-                        <img src="Detection_latest.jpg" alt="LatestDetection" width="500" height="360"/>
-                        </body>
-                        </html>
-                        '''
-
-                        self.do_HEAD()
-                        self.wfile.write(html.format('{0:.2f}'.format(environment_valid[0]),'{0:.1f}'.format(environment_valid[1]),'{0:.1f}'.format(environment_valid[2]),'{0:.1f}'.format(environment_valid[3]),
-                                                     environment_valid[4],environment_valid[5],environment_valid[6],environment_valid[7],self.detector_ctrl).encode("utf-8"))     
-
+                self.do_HEAD()
+                self.wfile.write(html.format('{0:.2f}'.format(self.data[0]),'{0:.1f}'.format(self.data[1]),'{0:.1f}'.format(self.data[2]),'{0:.1f}'.format(self.data[3]),
+                                                self.data[4],self.data[5],self.data[6],self.data[7],detector_ctrl['mode']).encode("utf-8"))     
 
  
         def do_POST(self):
                 content_length = int(self.headers['Content-Length'])    # Get the size of data
                 post_data = self.rfile.read(content_length).decode("utf-8")   # Get the data
                 post_data = post_data.split("=")[1]    # Only keep the value
-                global detector_mode
-                global detector_ctrl_index  #TODO: this needs to be changed to local variable
-                global DETECTOR_MODE_OPT
+                
 
                 if post_data == 'Refresh':
                         self._redirect('/')    # Redirect back to the root url
                         
                 elif post_data == 'ToggleDetectorMode':
-                        with lock:
-                                detector_ctrl_index += 1
-                                if detector_ctrl_index >= len(DETECTOR_MODE_OPT):
-                                        detector_ctrl_index = 0
-                                detector_mode = DETECTOR_MODE_OPT[detector_ctrl_index]
+                        DETECTOR_MODE_OPT = ('SCHEDULED','FORCE_OFF','FORCE_ON')
+                        global detector_ctrl
+                        detector_ctrl['index'] += 1
+                        if detector_ctrl['index'] >= len(DETECTOR_MODE_OPT):
+                                detector_ctrl['index'] = 0
+                        detector_ctrl['mode'] = DETECTOR_MODE_OPT[detector_ctrl['index']]
                         self._redirect('/')    # Redirect back to the root url
 
-class notification(object):
-        def __init__(self):
-                self.__send = False
-                self.__running = True
+        def log_message(self, format, *args):
+                return
+
+class notificationsThread(threading.Thread):
+        def __init__(self,mode = {'email': False, 'sms' : False}):
+                threading.Thread.__init__(self)
+                self._send = False
+                self._running = True
+                self._mode = mode
 
         def send_notification(self):
-                self.__send = True
+                self._send = True
 
         def run(self):
-                while self.__running == True:
-                        if self.__send == True:
-                                os.chdir(REPOSITORY_PATH)
-                                os.system('python notify.py')
-                                os.chdir(OBJECTDETECTION_PATH)
-                                self.__send = False
+                while self._running == True:
+                        if self._send == True:
+
+                                if self._mode.get('email') == True:
+                                        os.chdir(REPOSITORY_PATH)
+                                        os.system('python notify.py')
+                                        os.chdir(OBJECTDETECTION_PATH)
+
+                                if self._mode.get('sms') == True:
+                                        print('sms send not implemented yet')
+
+                                self._send = False
                         time.sleep(10)
                 
         def terminate(self):
-                self.__running = False
-
-
-
-
-        
-        
+                self._running = False
                               
 
 
 #create breaker thread for exit from camera loop
 print('Detector active: Monday - Friday, ' + '{:02}'.format(SCHEDULE_ON) + ':00 - ' + '{:02}'.format(SCHEDULE_OFF) + ':00')
-print('Press q to exit. Press e to print current environmental conditions')
+print('Press q to exit. Press e to print all measurements')
 
 breakNow = False
 envPrint = False
@@ -517,43 +534,33 @@ if camera_type == 'picamera_env':
     rawCapture = PiRGBArray(camera, size=(IM_WIDTH,IM_HEIGHT))
     rawCapture.truncate(0)
 
-    #Prepare log files
-    now = datetime.datetime.now()
-
     #Start separate thread for environment measurements
-    #Create class
-    collector = measurements()
     #Create Thread
-    measurementsThread = Thread(target = collector.run)
-    measurementsThread.daemon = False
+    collector = measurementsThread()
     #Start Thread
-    measurementsThread.start()
+    collector.start()
 
-    #Start separate thread for environment server
-    #Create class
-    webpage = HTTPServer(('', PORT), httpserver)
-    #Create Thread
-    serverThread = Thread(target = webpage.serve_forever)
-    serverThread.daemon = True
-    #Start Thread
-    serverThread.start()
+    #Start threaded web server
+    webpage = startServerThread()
     print("Serving at port:",PORT) 
 
     #Start separate thread for email notifications
-    email_notification = notification()
-    notificationThread = Thread(target = email_notification.run)
-    notificationThread.start()
+    notifications = notificationsThread({'email': True, 'sms' : False})
+    notifications.start()
         
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        with lock:    
-                if(data_ready == True):
-                        environment_valid = environment
-                        data_ready = False
+        if(collector.checkDataAvbl() == True):
+                with lock:
+                        validated_data = collector.getAllData()
+                collector.setConsumed()
 
         now = datetime.datetime.now()
-        if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_mode == 'SCHEDULED') or detector_mode == 'FORCE_ON':
+        if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_ctrl['mode'] == 'SCHEDULED') or detector_ctrl['mode'] == 'FORCE_ON':
+
+                with lock:
+                        detector_ctrl['armed'] = True
 
                 cooler.turnON()
                 t1 = cv2.getTickCount()
@@ -579,40 +586,38 @@ if camera_type == 'picamera_env':
                     use_normalized_coordinates=True,
                     line_thickness=8,
                     min_score_thresh=0.7)
-                        
-                date_log = str(datetime.datetime.now())
+
 
                 overlay = frame.copy()
                 alpha = 0.7 # Transparency factor
                 
                 #cv2.putText(overlay,"FPS: {0:.2f} ".format(frame_rate_calc),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"CPU " + environment_valid[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"CPU " + validated_data[7],(200,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 #cv2.putText(overlay,"Environment:",(30,120),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(environment_valid[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"Humidity: {0:.1f} %".format(environment_valid[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(environment_valid[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(environment_valid[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"PM1: {} ug/m3".format(environment_valid[4]),(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"PM2.5: {} ug/m3".format(environment_valid[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
-                #cv2.putText(overlay,"PM10: {} ug/m3".format(environment_valid[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
-               
-
+                #cv2.putText(overlay,"Pressure: {0:.2f} hPa".format(validated_data[0]),(30,150),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Humidity: {0:.1f} %".format(validated_data[1]),(30,180),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Temperature: {0:.1f} 'C".format(validated_data[2]),(30,210),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"Dew Point: {0:.1f} 'C".format(validated_data[3]),(30,240),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"PM1: {} ug/m3".format(validated_data[4]),(30,270),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"PM2.5: {} ug/m3".format(validated_data[5]),(30,300),font,1,(255,255,0),2,cv2.LINE_AA)
+                #cv2.putText(overlay,"PM10: {} ug/m3".format(validated_data[6]),(30,330),font,1,(255,255,0),2,cv2.LINE_AA)
+                    
+                now = str(datetime.datetime.now())
+                
                 # Class 1 represents human
                 if ((classes[0][0] == 1 and scores[0][0] > 0.75) or (classes[0][1] == 1 and scores[0][1] > 0.75) or (classes[0][2] == 1 and scores[0][2] > 0.75)):
-                        cv2.putText(overlay,"Human detected! on " + date_log,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
-                        with lock:
-                                cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % date_log, frame)
-                                cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
-                                email_notification.send_notification()
+                        cv2.putText(overlay,"Human detected! on " + now,(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
+                        cv2.imwrite(DETECTIONS_PATH + '/Detection_Frame_%s.jpg' % now, frame)
+                        cv2.imwrite(DETECTIONS_PATH + '/Detection_latest.jpg', overlay)
+                        notifications.send_notification()
 
                 else:
                         cv2.putText(overlay,"Detector ARMED. No Human detected!",(30,80),font,1,(255,255,0),2,cv2.LINE_AA)
                     
                 image = cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0)
                 # All the results have been drawn on the frame, so it's time to display it.
-                with lock:
-                        cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', image)
-                        #cv2.imshow('Object detector', image)
+                cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', image)
+                #cv2.imshow('Object detector', image)
 
                 t2 = cv2.getTickCount()
                 time1 = (t2-t1)/freq
@@ -622,13 +627,14 @@ if camera_type == 'picamera_env':
                 frame = np.copy(frame1.array)
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
-                cv2.putText(frame,"Detector DISARMED. Refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"Detector DISARMED. Refreshing picture every {}s".format(DISARMED_REFRESH_RATE_S),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
                 with lock:
-                        cv2.imwrite(DETECTIONS_PATH + '/Detector.jpg', frame)
-                        #cv2.imshow('Object detector', frame)
+                        detector_ctrl['armed'] = False
+                #cv2.imshow('Object detector', frame)
                         
                 cooler.turnOFF()
-                time.sleep(15)
+                time.sleep(DISARMED_REFRESH_RATE_S)
 
         if breakNow == True:
                 print('closing, please wait few seconds for terminal..')
@@ -636,8 +642,7 @@ if camera_type == 'picamera_env':
 
         if envPrint == True:
                 print('Pressure, Humidity, Temperature, Dew_point, PM1, PM2.5, PM10, CPU, Latitude, Longitude, Altitude')
-                with lock:
-                        print(environment_valid)
+                print(validated_data)
                 envPrint = False
 
         # Press 'q' to quit
@@ -650,13 +655,16 @@ if camera_type == 'picamera_env':
     cooler.cleanSys()
     
     collector.terminate()
-    measurementsThread.join()
-    email_notification.terminate()
-    notificationThread.join()
+    collector.join(20)
+
+    notifications.terminate()
+    notifications.join(20)
+
+    webpage.shutdown()
+
     del collector
+    del notifications
     del webpage
-    del email_notification
-    
     
     camera.close()
 
@@ -714,10 +722,10 @@ if camera_type == 'picamera_noaddons':
                 frame = np.copy(frame1.array)
                 frame.setflags(write=1)
                 frame_expanded = np.expand_dims(frame, axis=0)
-                cv2.putText(frame,"Detector DISARMED. Refreshing picture every 15s",(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
+                cv2.putText(frame,"Detector DISARMED. Refreshing picture every {}s".format(DISARMED_REFRESH_RATE_S),(30,50),font,1,(255,255,0),2,cv2.LINE_AA)
                 cv2.imshow('Object detector', frame)
                 cooler.turnOFF()
-                time.sleep(15)
+                time.sleep(DISARMED_REFRESH_RATE_S)
                 
 
         if breakNow == True:

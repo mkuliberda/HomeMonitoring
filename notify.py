@@ -1,7 +1,7 @@
 import sys
 
 
-#sys.path.insert(1, '/home/pi/Desktop/HomeMonitoring/libraries')
+sys.path.insert(1, '/home/pi/Desktop/HomeMonitoring')
 
 #TODO: move all configs to JSON
 
