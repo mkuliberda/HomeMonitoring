@@ -110,7 +110,25 @@ class measurementsThread(threading.Thread):
         def checkRunning(self):
                 return self._running
 
-        # CPU temperature reading
+        def calculateDewPoint(self, env_hum, env_temp):
+                return (env_hum/100.0) ** 0.125*(112+0.9*env_temp)+0.1*env_temp-112
+        
+        def saveMeasurements(self, measurements):
+
+                now = datetime.datetime.now()
+                environment_log_file = ENVIRONMENT_PATH + '/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
+                
+                if not os.path.isfile(environment_log_file):
+                        with open(environment_log_file, 'a') as f:
+                                f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
+
+                with open(environment_log_file, 'a') as f:
+                        s = '{:02}'.format(int(now.hour)) + ':' + '{:02}'.format(int(now.minute)) + ':' + '{:02}'.format(int(now.second)) + \
+                        ',' + '{0:.2f}'.format(measurements[0]) + ',' + '{0:.1f}'.format(measurements[1]) + ',' + '{0:.1f}'.format(measurements[2]) + ',' + \
+                        '{0:.1f}'.format(measurements[3]) + ',' + '{}'.format(measurements[4]) + ',' + '{}'.format(measurements[5]) + ',' + '{}'.format(measurements[6]) + \
+                        ',' + '{}'.format(measurements[8]) + ',' + '{}'.format(measurements[9]) + ',' + '{}'.format(measurements[10]) + '\r\n'
+                        f.write(s)
+
         def getTemperatureCPU(self):
                 try:
                         f = open("/sys/class/thermal/thermal_zone0/temp", "r")
@@ -122,7 +140,6 @@ class measurementsThread(threading.Thread):
                         
                 return temp
         
-        # Environment conditions reading
         def getEnvironmentalConditions(self):
                 
                 pm = [None, None, None, None]
@@ -155,11 +172,10 @@ class measurementsThread(threading.Thread):
                 except:
                         print('DHT sensor error')
                         
-                #TODO move data validation to separate method
                 if humidity is not None and temperature is not None and pressure is not None and pm[1] is not None and pm[2] is not None and pm[3] is not None:
                         if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
                                 #temperature = temperature - 1 #account for sensor and rpi self heating by approx 1C TODO: this needs to be improved by reduction for detector work
-                                dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
+                                dew_point = self.calculateDewPoint(humidity,temperature)
                                 return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0', self.lat, self.lon, self.alt]
                         else:
                                 return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
@@ -170,28 +186,11 @@ class measurementsThread(threading.Thread):
 
                 while self._running:
 
-                        now = datetime.datetime.now()
-                        environment_log_file = ENVIRONMENT_PATH + '/Environment_' + str(now.day) + '_' + str(now.month) + '_' + str(now.year) + '.csv'
-                        
-                        if not os.path.isfile(environment_log_file):
-                                f = open(environment_log_file, 'a')
-                                f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
-                                f.close()
-
                         self.data = self.getEnvironmentalConditions()
                         self.data[7] = self.getTemperatureCPU()
 
                         if self.data[0] != 0.0:
-                                with open(environment_log_file, 'a') as f:
-                                        s = '{:02}'.format(int(now.hour)) + ':' + '{:02}'.format(int(now.minute)) + ':' + '{:02}'.format(int(now.second)) + \
-                                        ',' + '{0:.2f}'.format(self.data[0]) + ',' + '{0:.1f}'.format(self.data[1]) + ',' + '{0:.1f}'.format(self.data[2]) + ',' + \
-                                        '{0:.1f}'.format(self.data[3]) + ',' + '{}'.format(self.data[4]) + ',' + '{}'.format(self.data[5]) + ',' + '{}'.format(self.data[6]) + \
-                                        ',' + '{}'.format(self.data[8]) + ',' + '{}'.format(self.data[9]) + ',' + '{}'.format(self.data[10]) + '\r\n'
-                                        f.write(s)
-
-                        #os.chdir(STATISTICS_PATH)
-                        #os.system('python3 logs_statistics.py --image')
-                        #os.chdir(OBJECTDETECTION_PATH)
+                                self.saveMeasurements(self.data[:])
 
                         self._data_ready = True
                         time.sleep(30)
@@ -290,9 +289,9 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                       
                 html = '''
                 <html>
-                <body style="width:350px; margin: 10px auto;">
+                <body style="width:500px; margin:auto">
                 <h1><center>HOME MONITOR</center></h1>
-                <h2><center>Current conditions</center></h2>
+                <h2><center>Current status and environment</center></h2>
                 <table border=1 width="500">
                 <tr>
                 <td style="text-align:center">Pressure [hPa]</th>
@@ -331,13 +330,24 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 <td style="text-align:center">{}</th>
                 </tr>
                 </table>
-                <center>
+
+                </br>
+                <h2><center>User control</center></h2>
+                <center><table width="500">
+                <tr>
+                <td style="text-align:center">
                 <form action="/" method="POST">
-                        <input type="submit" name="submit" value="Refresh">
-                <form action="/" method="POST">
-                        <input type="submit" name="submit" value="ToggleDetectorMode">
+                        <input type="submit" name="submit" value="Refresh" style="height:40px; width:170px">
                 </form>
-                </center>
+                </th>
+                <td style="text-align:center">
+                <form action="/" method="POST">
+                        <input type="submit" name="submit" value="ToggleDetectorMode" style="height:40px; width:170px">
+                </form>
+                </th>
+                </tr>
+                </table></center>
+
                 <img src="plots.jpg" alt="Plots" width="500" height="500"/>
                 </br>
                 <center><h2>Detector preview</h2></center>
