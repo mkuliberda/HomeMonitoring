@@ -87,14 +87,13 @@ lock = threading.Lock()
 class measurementsThread(threading.Thread):
         def __init__(self):
 
-                threading.Thread.__init__(self)
-
                 self._running = True
                 self.lat = 54.390819
                 self.lon = 18.599229
                 self.alt = 50.0
                 self._data_ready = False
-                self.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]           
+                self.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
+                threading.Thread.__init__(self)
 
         def terminate(self):
                 self._running = False
@@ -108,8 +107,11 @@ class measurementsThread(threading.Thread):
         def getAllData(self):
                 return self.data
 
+        def checkRunning(self):
+                return self._running
+
         # CPU temperature reading
-        def get_cpu_temperature(self):
+        def getTemperatureCPU(self):
                 try:
                         f = open("/sys/class/thermal/thermal_zone0/temp", "r")
                         t = float(f.readline ())
@@ -121,7 +123,7 @@ class measurementsThread(threading.Thread):
                 return temp
         
         # Environment conditions reading
-        def get_environmental_conditions(self):
+        def getEnvironmentalConditions(self):
                 
                 pm = [None, None, None, None]
                 pressure = None
@@ -153,10 +155,10 @@ class measurementsThread(threading.Thread):
                 except:
                         print('DHT sensor error')
                         
-                
+                #TODO move data validation to separate method
                 if humidity is not None and temperature is not None and pressure is not None and pm[1] is not None and pm[2] is not None and pm[3] is not None:
                         if humidity >= 0.0 and humidity <= 100.0 and temperature >-40.0 and temperature < 80.0:
-                                temperature = temperature - 1 #account for sensor and rpi self heating by approx 1C TODO: this needs to be improved
+                                #temperature = temperature - 1 #account for sensor and rpi self heating by approx 1C TODO: this needs to be improved by reduction for detector work
                                 dew_point = (humidity/100.0) ** 0.125*(112+0.9*temperature)+0.1*temperature-112
                                 return [pressure, humidity, temperature, dew_point, pm[1], pm[2], pm[3], '0', self.lat, self.lon, self.alt]
                         else:
@@ -176,20 +178,20 @@ class measurementsThread(threading.Thread):
                                 f.write('Time,Pressure,Humidity,Temperature,Dew_point,PM1,PM2.5,PM10,Lat,Lon,Alt' + '\r\n')
                                 f.close()
 
-                        self.data = self.get_environmental_conditions()
-                        self.data[7] = self.get_cpu_temperature()
+                        self.data = self.getEnvironmentalConditions()
+                        self.data[7] = self.getTemperatureCPU()
 
                         if self.data[0] != 0.0:
-                                with open(environment_log_file, 'a') as f2:
+                                with open(environment_log_file, 'a') as f:
                                         s = '{:02}'.format(int(now.hour)) + ':' + '{:02}'.format(int(now.minute)) + ':' + '{:02}'.format(int(now.second)) + \
                                         ',' + '{0:.2f}'.format(self.data[0]) + ',' + '{0:.1f}'.format(self.data[1]) + ',' + '{0:.1f}'.format(self.data[2]) + ',' + \
                                         '{0:.1f}'.format(self.data[3]) + ',' + '{}'.format(self.data[4]) + ',' + '{}'.format(self.data[5]) + ',' + '{}'.format(self.data[6]) + \
                                         ',' + '{}'.format(self.data[8]) + ',' + '{}'.format(self.data[9]) + ',' + '{}'.format(self.data[10]) + '\r\n'
-                                        f2.write(s)
+                                        f.write(s)
 
-                        os.chdir(STATISTICS_PATH)
-                        os.system('python3 logs_statistics.py --image')
-                        os.chdir(OBJECTDETECTION_PATH)
+                        #os.chdir(STATISTICS_PATH)
+                        #os.system('python3 logs_statistics.py --image')
+                        #os.chdir(OBJECTDETECTION_PATH)
 
                         self._data_ready = True
                         time.sleep(30)
@@ -379,10 +381,11 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 class notificationsThread(threading.Thread):
         def __init__(self,mode = {'email': False, 'sms' : False}):
-                threading.Thread.__init__(self)
                 self._send = False
                 self._running = True
                 self._mode = mode
+                
+                threading.Thread.__init__(self)
 
         def send_notification(self):
                 self._send = True
@@ -528,18 +531,13 @@ font = cv2.FONT_HERSHEY_SIMPLEX
 # Initialize camera and perform object detection.
 ### Picamera with environment conditions and logging ###
 if camera_type == 'picamera_env':
+
     # Initialize Picamera and grab reference to the raw capture
     camera = PiCamera()
     camera.resolution = (IM_WIDTH,IM_HEIGHT)
     camera.framerate = 10
     rawCapture = PiRGBArray(camera, size=(IM_WIDTH,IM_HEIGHT))
     rawCapture.truncate(0)
-
-    #Start separate thread for environment measurements
-    #Create Thread
-    collector = measurementsThread()
-    #Start Thread
-    collector.start()
 
     #Start threaded web server
     webpage = startServerThread()
@@ -548,16 +546,26 @@ if camera_type == 'picamera_env':
     #Start separate thread for email notifications
     notifications = notificationsThread({'email': True, 'sms' : False})
     notifications.start()
+    
+    #Start separate thread for environment measurements
+    #Create Thread
+    collector = measurementsThread()
+    #Start Thread
+    collector.start()
+
         
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
+        now = datetime.datetime.now()   
         if(collector.checkDataAvbl() == True):
                 with lock:
                         validated_data = collector.getAllData()
+                os.chdir(STATISTICS_PATH)
+                os.system('python3 logs_statistics.py --image')
+                os.chdir(OBJECTDETECTION_PATH)
                 collector.setConsumed()
 
-        now = datetime.datetime.now()
         if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_ctrl['mode'] == 'SCHEDULED') or detector_ctrl['mode'] == 'FORCE_ON':
 
                 with lock:
@@ -654,19 +662,22 @@ if camera_type == 'picamera_env':
 
     cooler.turnOFF()
     cooler.cleanSys()
+    print('cooler off')
     
     collector.terminate()
-    collector.join(20)
+    collector.join(35)
+    del collector
+    print('collector off')
 
     notifications.terminate()
-    notifications.join(20)
+    notifications.join(15)
+    del notifications
+    print('notifications off')
 
     webpage.shutdown()
-
-    del collector
-    del notifications
     del webpage
-    
+    print('server off')
+
     camera.close()
 
 
