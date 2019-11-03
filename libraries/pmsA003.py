@@ -12,6 +12,7 @@ class pmsA003():
         self.pm_valid = [False, False, False]
         
     def __exit__(self, exc_type, exc_value, traceback):
+        print('pmsA003 serial closing')
         self.serial.close()
 
 
@@ -53,23 +54,38 @@ class pmsA003():
         else:
             return False
 
-    def read_data(self,data_type = 'list'):
-        while True:
+    def getFalseValues(self, data_type):
+        if data_type == 'dict':
+            return {'time': datetime.datetime.now(), 'pm1.0': None, 'pm2.5' : None, 'pm10.0' : None}
+        
+        if data_type == 'list':
+            return [datetime.datetime.now(), None, None, None]
+
+
+    def read_data(self, retry_count = 32, data_type = 'list'):
+
+        retries_left = retry_count
+
+        while retries_left > 0:
+
             s1 = self.serial.read(1)
-            s2 = self.serial.read(1)
-            if s1 == b'\x42' and s2 == b'\x4d':
-                payload = self.serial.read(30)
-                self.data = bytearray(s1 + s2 + payload)
-                if self.verify_data():
-                    if data_type == 'dict':
-                        return self._PMdata_dict()
-                    if data_type == 'list':
-                        return self._PMdata_list()
-                else:
-                    if data_type == 'dict':
-                        return {'time': datetime.datetime.now(), 'pm1.0': 0, 'pm2.5' : 0, 'pm10.0' : 0}
-                    if data_type == 'list':
-                        return [datetime.datetime.now(), 0, 0, 0]
+            if s1 == b'\x42':
+                s2 = self.serial.read(1)
+                if s2 == b'\x4d':
+                    payload = self.serial.read(30)
+                    self.data = bytearray(s1 + s2 + payload)
+                    if self.verify_data():
+                        if data_type == 'dict':
+                            return self._PMdata_dict()
+                        if data_type == 'list':
+                            return self._PMdata_list()
+                    else:
+                        return self.getFalseValues(data_type)
+            else: 
+                retries_left -= 1
+
+        print('pmsA003 read error')
+        return self.getFalseValues(data_type)  
 
     def _PMdata_dict(self):
 

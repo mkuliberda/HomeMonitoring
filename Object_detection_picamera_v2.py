@@ -37,7 +37,7 @@ import Adafruit_DHT
 import Adafruit_BMP.BMP085 as BMP085
 import smbus
 import time
-from threading import Thread
+from threading import Event, Thread
 import threading
 from pmsA003 import *
 import tty
@@ -61,6 +61,7 @@ DISARMED_REFRESH_RATE_S = 10
 # Global variables
 validated_data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', 0.0, 0.0, 0.0]
 detector_ctrl = {'mode' : 'SCHEDULED', 'index' : 0, 'armed': False}
+validated_gradients = {'Pressure' : 0.0, 'Humidity' : 0.0, 'Temperature' : 0.0}
 
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
@@ -80,7 +81,8 @@ IM_HEIGHT = 720
 #IM_HEIGHT = 480   #slightly faster framerate
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-lock = threading.Lock()
+lock = threading.RLock()
+plottingEvent = threading.Event()
 
 
 # Environment conditions gathering and logging thread
@@ -93,6 +95,10 @@ class measurementsThread(threading.Thread):
                 self.alt = 50.0
                 self._data_ready = False
                 self.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
+                self.gradients = {'Pressure' : 0.0, 'Humidity' : 0.0, 'Temperature' : 0.0}
+                self.pressureBuffer = [0.0] * 60 # 30min buffer
+                self.humidityBuffer = [0.0] * 20 # 10min buffer
+                self.temperatureBuffer = [0.0] * 20 # 10min buffer 
                 threading.Thread.__init__(self)
 
         def terminate(self):
@@ -100,6 +106,9 @@ class measurementsThread(threading.Thread):
 
         def setConsumed(self):
                 self._data_ready = False
+
+        def setProduced(self):
+                self._data_ready = True
         
         def checkDataAvbl(self):
                 return self._data_ready
@@ -112,7 +121,25 @@ class measurementsThread(threading.Thread):
 
         def calculateDewPoint(self, env_hum, env_temp):
                 return (env_hum/100.0) ** 0.125*(112+0.9*env_temp)+0.1*env_temp-112
-        
+
+        def updateBuffer(self, current_buffer, new_sample):
+
+                size = len(current_buffer)
+                new_buffer = np.roll(current_buffer,-1)
+                new_buffer[size-1] = new_sample
+                
+                return new_buffer
+
+        def calculateGradient(self, buffer):
+
+                x = np.linspace(0, len(buffer)-1, len(buffer))
+                gradient_coeffs = np.polyfit(x,buffer,1)
+                
+                return gradient_coeffs[0]
+
+        def getGradients(self):
+                return self.gradients
+
         def saveMeasurements(self, measurements):
 
                 now = datetime.datetime.now()
@@ -153,7 +180,6 @@ class measurementsThread(threading.Thread):
                         pm = aqi_sensor.read_data()
                 except:
                         print('pms7003 sensor error')
-                
                 try:
                         bus = smbus.SMBus(1)
                         try:
@@ -161,11 +187,10 @@ class measurementsThread(threading.Thread):
                                 baro_sensor = BMP085.BMP085()
                                 baro_sensor = BMP085.BMP085(mode=BMP085.BMP085_ULTRAHIGHRES)
                                 pressure = baro_sensor.read_pressure()/100
-                                
                         except:
                                 print('BMP sensor error')
                 except:
-                        print('Wrong bus')
+                        print('BMP085 wrong bus')
 
                 try:
                         humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.AM2302, 4)
@@ -189,10 +214,20 @@ class measurementsThread(threading.Thread):
                         self.data = self.getEnvironmentalConditions()
                         self.data[7] = self.getTemperatureCPU()
 
+                        self.pressureBuffer = self.updateBuffer(self.pressureBuffer[:], self.data[0])
+                        self.gradients['Pressure'] = self.calculateGradient(self.pressureBuffer)
+
+                        self.humidityBuffer = self.updateBuffer(self.humidityBuffer[:], self.data[1])
+                        self.gradients['Humidity'] = self.calculateGradient(self.humidityBuffer)
+
+                        self.temperatureBuffer = self.updateBuffer(self.temperatureBuffer[:], self.data[2])
+                        self.gradients['Temperature'] = self.calculateGradient(self.temperatureBuffer)
+
+
                         if self.data[0] != 0.0:
                                 self.saveMeasurements(self.data[:])
 
-                        self._data_ready = True
+                        self.setProduced()
                         time.sleep(30)
 
 class cooling(object):
@@ -214,18 +249,9 @@ class cooling(object):
         return self._is_running
     
     def cleanSys(self):
-        GPIO.cleanup()
+        GPIO.cleanup()     
 
-def startServerThread():
-	
-	serverInstance = ThreadedHTTPServer(('0.0.0.0', PORT), MyRequestHandler)
-	print('Starting server...')
-	
-	serverThread = threading.Thread(target = serverInstance.serve_forever)
-	serverThread.deamon = False
-	serverThread.start()
 
-	return serverInstance
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     """Handle requests in a separate thread."""
@@ -233,14 +259,17 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
 
-        #def __init__(self, request, client_address, server):
-                #self.detector_ctrl_index = 0
-                #print(self.detector_ctrl_index)
-                #http.server.SimpleHTTPRequestHandler.__init__(self, request, client_address, server)
-                 #self.data = data_list
-                 #os.chdir(OBJECTDETECTION_PATH)
-                 #with open("favicon.ico", "rb") as favicon:
-                 #        self.favicon = favicon.read()
+        def __init__(self, request, client_address, server):
+
+                self.data = server.data
+                self.det_ctrl = server.det_ctrl
+                self.gradients = server.gradients
+                http.server.SimpleHTTPRequestHandler.__init__(self, request, client_address, server)
+
+                #self.data = data_list
+                #os.chdir(OBJECTDETECTION_PATH)
+                #with open("favicon.ico", "rb") as favicon:
+                #        self.favicon = favicon.read()
             
         def do_HEAD(self):
                 self.send_response(200)
@@ -254,6 +283,7 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
 
         def do_GET(self):
+
                 #print(self.path)
                 #if '/favicon.ico' in self.path:
                 #        self.send_response(200)
@@ -295,15 +325,15 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 <table border=1 width="500">
                 <tr>
                 <td style="text-align:center">Pressure [hPa]</th>
-                <td style="text-align:center">{}</th>
+                <td style="text-align:center">{} dP:{}/30min</th>
                 </tr>
                 <tr>
                 <td style="text-align:center">Humidity [%]</th>
-                <td style="text-align:center">{}</th>
+                <td style="text-align:center">{} dH:{}/10min</th>
                 </tr>
                 <tr>
                 <td style="text-align:center">Air Temperature [C]</th>
-                <td style="text-align:center">{}</th>
+                <td style="text-align:center">{} dT:{}/10min</th>
                 </tr>
                 <tr>
                 <td style="text-align:center">Dew Point [C]</th>
@@ -360,12 +390,12 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 </body>
                 </html>
                 '''
-                global validated_data, detector_ctrl
-                self.data = validated_data
 
                 self.do_HEAD()
-                self.wfile.write(html.format('{0:.2f}'.format(self.data[0]),'{0:.1f}'.format(self.data[1]),'{0:.1f}'.format(self.data[2]),'{0:.1f}'.format(self.data[3]),
-                                                self.data[4],self.data[5],self.data[6],self.data[7],detector_ctrl['mode']).encode("utf-8"))     
+                self.wfile.write(html.format('{0:.2f}'.format(self.data[0]),'{0:.2f}'.format(self.gradients['Pressure']), \
+                                                '{0:.1f}'.format(self.data[1]),'{0:.1f}'.format(self.gradients['Humidity']), \
+                                                '{0:.1f}'.format(self.data[2]),'{0:.1f}'.format(self.gradients['Temperature']), \
+                                                '{0:.1f}'.format(self.data[3]),self.data[4],self.data[5],self.data[6],self.data[7],self.det_ctrl['mode']).encode("utf-8"))     
 
  
         def do_POST(self):
@@ -379,11 +409,10 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                         
                 elif post_data == 'ToggleDetectorMode':
                         DETECTOR_MODE_OPT = ('SCHEDULED','FORCE_OFF','FORCE_ON')
-                        global detector_ctrl
-                        detector_ctrl['index'] += 1
-                        if detector_ctrl['index'] >= len(DETECTOR_MODE_OPT):
-                                detector_ctrl['index'] = 0
-                        detector_ctrl['mode'] = DETECTOR_MODE_OPT[detector_ctrl['index']]
+                        self.det_ctrl['index'] += 1
+                        if self.det_ctrl['index'] >= len(DETECTOR_MODE_OPT):
+                                self.det_ctrl['index'] = 0
+                        self.det_ctrl['mode'] = DETECTOR_MODE_OPT[self.det_ctrl['index']]
                         self._redirect('/')    # Redirect back to the root url
 
         def log_message(self, format, *args):
@@ -417,6 +446,24 @@ class notificationsThread(threading.Thread):
                 
         def terminate(self):
                 self._running = False
+
+def createPlots(event):
+
+        while True:
+
+                plottingEvent.wait()
+        
+                try:
+                        os.chdir(STATISTICS_PATH)
+                        os.system('python3 logs_statistics.py --image')
+                        os.chdir(OBJECTDETECTION_PATH)
+                        plottingEvent.clear()
+                except:
+                        plottingEvent.clear()
+                        break
+
+
+ 
                               
 
 
@@ -548,32 +595,46 @@ if camera_type == 'picamera_env':
     camera.framerate = 10
     rawCapture = PiRGBArray(camera, size=(IM_WIDTH,IM_HEIGHT))
     rawCapture.truncate(0)
-
-    #Start threaded web server
-    webpage = startServerThread()
-    print("Serving at port:",PORT) 
+    
+    #Start threaded web server    
+    webpage = ThreadedHTTPServer(('0.0.0.0', PORT), MyRequestHandler)
+    with lock:
+            webpage.data = validated_data
+            webpage.gradients = validated_gradients
+            webpage.det_ctrl = detector_ctrl
+    print('Starting server...')
+    
+    serverThread = threading.Thread(target = webpage.serve_forever)
+    serverThread.deamon = False
+    serverThread.start()
+    print("Serving webpage at port:",PORT) 
 
     #Start separate thread for email notifications
     notifications = notificationsThread({'email': True, 'sms' : False})
     notifications.start()
     
     #Start separate thread for environment measurements
-    #Create Thread
     collector = measurementsThread()
-    #Start Thread
     collector.start()
+    
+    #Start separate thread for plotting of measurements
+    plotsThread = threading.Thread(target=createPlots, args=(plottingEvent,))
+    plotsThread.daemon = True
+    plotsThread.start()
 
         
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
-        now = datetime.datetime.now()   
+        now = datetime.datetime.now()
         if(collector.checkDataAvbl() == True):
                 with lock:
                         validated_data = collector.getAllData()
-                os.chdir(STATISTICS_PATH)
-                os.system('python3 logs_statistics.py --image')
-                os.chdir(OBJECTDETECTION_PATH)
+                        validated_gradients = collector.getGradients()
+                        webpage.data = validated_data
+                        webpage.gradients = validated_gradients
+                        detector_ctrl = webpage.det_ctrl
+                plottingEvent.set()
                 collector.setConsumed()
 
         if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_ctrl['mode'] == 'SCHEDULED') or detector_ctrl['mode'] == 'FORCE_ON':
@@ -660,8 +721,8 @@ if camera_type == 'picamera_env':
                 break
 
         if envPrint == True:
-                print('Pressure, Humidity, Temperature, Dew_point, PM1, PM2.5, PM10, CPU, Latitude, Longitude, Altitude')
-                print(validated_data)
+                print('Pressure, Humidity, Temperature, Dew_point, PM1, PM2.5, PM10, CPU, Latitude, Longitude, Altitude, Gradients')
+                print(validated_data, validated_gradients)
                 envPrint = False
 
         # Press 'q' to quit
@@ -689,6 +750,7 @@ if camera_type == 'picamera_env':
     print('server off')
 
     camera.close()
+    print('camera off')
 
 
 if camera_type == 'picamera_noaddons':
@@ -767,5 +829,6 @@ if camera_type == 'picamera_noaddons':
     
 
 del cooler
+print('exiting...')
 cv2.destroyAllWindows()
 
