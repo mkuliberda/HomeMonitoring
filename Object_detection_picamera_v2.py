@@ -96,9 +96,9 @@ class measurementsThread(threading.Thread):
                 self._data_ready = False
                 self.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
                 self.gradients = {'Pressure' : 0.0, 'Humidity' : 0.0, 'Temperature' : 0.0}
-                self.pressureBuffer = [0.0] * 60 # 30min buffer
-                self.humidityBuffer = [0.0] * 20 # 10min buffer
-                self.temperatureBuffer = [0.0] * 20 # 10min buffer 
+                self.pressureBuffer = [0.0] * 120 # 60min buffer
+                self.humidityBuffer = [0.0] * 60 # 30min buffer
+                self.temperatureBuffer = [0.0] * 60 # 30min buffer 
                 threading.Thread.__init__(self)
 
         def terminate(self):
@@ -324,16 +324,16 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 <h2><center>Current status and environment</center></h2>
                 <table border=1 width="500">
                 <tr>
-                <td style="text-align:center">Pressure [hPa]</th>
-                <td style="text-align:center">{} dP:{}/30min</th>
+                <td style="text-align:center">Pressure (dP) [hPa (hPa/1h)]</th>
+                <td style="text-align:center">{} ({})</th>
                 </tr>
                 <tr>
-                <td style="text-align:center">Humidity [%]</th>
-                <td style="text-align:center">{} dH:{}/10min</th>
+                <td style="text-align:center">Humidity (dH) [% (%/30min)]</th>
+                <td style="text-align:center">{} ({})</th>
                 </tr>
                 <tr>
-                <td style="text-align:center">Air Temperature [C]</th>
-                <td style="text-align:center">{} dT:{}/10min</th>
+                <td style="text-align:center">Air Temperature (dT) [C (C/30min)]</th>
+                <td style="text-align:center">{} ({})</th>
                 </tr>
                 <tr>
                 <td style="text-align:center">Dew Point [C]</th>
