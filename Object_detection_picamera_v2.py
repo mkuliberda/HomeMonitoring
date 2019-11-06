@@ -97,8 +97,8 @@ class measurementsThread(threading.Thread):
                 self.data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, '0', self.lat, self.lon, self.alt]
                 self.gradients = {'Pressure' : 0.0, 'Humidity' : 0.0, 'Temperature' : 0.0}
                 self.pressureBuffer = [0.0] * 120 # 60min buffer
-                self.humidityBuffer = [0.0] * 60 # 30min buffer
-                self.temperatureBuffer = [0.0] * 60 # 30min buffer 
+                self.humidityBuffer = [0.0] * 120 # 60min buffer
+                self.temperatureBuffer = [0.0] * 120 # 60min buffer 
                 threading.Thread.__init__(self)
 
         def terminate(self):
@@ -132,10 +132,13 @@ class measurementsThread(threading.Thread):
 
         def calculateGradient(self, buffer):
 
-                x = np.linspace(0, len(buffer)-1, len(buffer))
+                size = len(buffer)
+                x = np.linspace(0, len(buffer)-1, size)
                 gradient_coeffs = np.polyfit(x,buffer,1)
+                extremum = [gradient_coeffs[1] , (size-1)*gradient_coeffs[0]+gradient_coeffs[1]]
+                grad = (extremum[1] - extremum[0])
                 
-                return gradient_coeffs[0]
+                return grad
 
         def getGradients(self):
                 return self.gradients
@@ -324,15 +327,15 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 <h2><center>Current status and environment</center></h2>
                 <table border=1 width="500">
                 <tr>
-                <td style="text-align:center">Pressure (dP) [hPa (hPa/1h)]</th>
+                <td style="text-align:center">Pressure (dP) [hPa (hPa/h)]</th>
                 <td style="text-align:center">{} ({})</th>
                 </tr>
                 <tr>
-                <td style="text-align:center">Humidity (dH) [% (%/30min)]</th>
+                <td style="text-align:center">Humidity (dH) [% (%/h)]</th>
                 <td style="text-align:center">{} ({})</th>
                 </tr>
                 <tr>
-                <td style="text-align:center">Air Temperature (dT) [C (C/30min)]</th>
+                <td style="text-align:center">Air Temperature (dT) [C (C/h)]</th>
                 <td style="text-align:center">{} ({})</th>
                 </tr>
                 <tr>
@@ -392,9 +395,9 @@ class MyRequestHandler(http.server.SimpleHTTPRequestHandler):
                 '''
 
                 self.do_HEAD()
-                self.wfile.write(html.format('{0:.2f}'.format(self.data[0]),'{0:.2f}'.format(self.gradients['Pressure']), \
-                                                '{0:.1f}'.format(self.data[1]),'{0:.1f}'.format(self.gradients['Humidity']), \
-                                                '{0:.1f}'.format(self.data[2]),'{0:.1f}'.format(self.gradients['Temperature']), \
+                self.wfile.write(html.format('{0:.2f}'.format(self.data[0]),'{0:.3f}'.format(self.gradients['Pressure']), \
+                                                '{0:.1f}'.format(self.data[1]),'{0:.2f}'.format(self.gradients['Humidity']), \
+                                                '{0:.1f}'.format(self.data[2]),'{0:.2f}'.format(self.gradients['Temperature']), \
                                                 '{0:.1f}'.format(self.data[3]),self.data[4],self.data[5],self.data[6],self.data[7],self.det_ctrl['mode']).encode("utf-8"))     
 
  
