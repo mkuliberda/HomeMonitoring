@@ -50,7 +50,7 @@ from subprocess import Popen
 #TODO: move all the configs to JSON
 
 # Server port and address
-PORT=8080
+PORT=8081
 
 # Pin control
 FAN=18
