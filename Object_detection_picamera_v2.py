@@ -25,27 +25,22 @@ from picamera.array import PiRGBArray
 from picamera import PiCamera
 import tensorflow as tf
 import argparse
-import sys
 # Import utilites
 from utils import label_map_util
 from utils import visualization_utils as vis_util
 import RPi.GPIO as GPIO
 import glob
 import datetime
-import time
 import Adafruit_DHT
 import Adafruit_BMP.BMP085 as BMP085
 import smbus
-import time
 from threading import Event, Thread
 import threading
 from pmsA003 import *
 import tty
 import termios
-import io
 import http.server
 import socketserver
-from subprocess import Popen
 
 #TODO: move all the configs to JSON
 
@@ -233,7 +228,7 @@ class measurementsThread(threading.Thread):
                         self.setProduced()
                         time.sleep(30)
 
-class cooling(object):
+class cooling():
     def __init__(self,fan_pin):
         self._is_running = False
         self.pin = fan_pin
@@ -433,15 +428,15 @@ class notificationsThread(threading.Thread):
                 self._send = True
 
         def run(self):
-                while self._running == True:
-                        if self._send == True:
+                while self._running:
+                        if self._send:
 
-                                if self._mode.get('email') == True:
+                                if self._mode.get('email'):
                                         os.chdir(REPOSITORY_PATH)
                                         os.system('python notify.py')
                                         os.chdir(OBJECTDETECTION_PATH)
 
-                                if self._mode.get('sms') == True:
+                                if self._mode.get('sms'):
                                         print('sms send not implemented yet')
 
                                 self._send = False
@@ -454,15 +449,15 @@ def createPlots(event):
 
         while True:
 
-                plottingEvent.wait()
+                event.wait()
         
                 try:
                         os.chdir(STATISTICS_PATH)
                         os.system('python3 logs_statistics.py --image')
                         os.chdir(OBJECTDETECTION_PATH)
-                        plottingEvent.clear()
+                        event.clear()
                 except:
-                        plottingEvent.clear()
+                        event.clear()
                         break
 
 
@@ -630,7 +625,7 @@ if camera_type == 'picamera_env':
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 
         now = datetime.datetime.now()
-        if(collector.checkDataAvbl() == True):
+        if collector.checkDataAvbl():
                 with lock:
                         validated_data = collector.getAllData()
                         validated_gradients = collector.getGradients()
@@ -719,11 +714,11 @@ if camera_type == 'picamera_env':
                 cooler.turnOFF()
                 time.sleep(DISARMED_REFRESH_RATE_S)
 
-        if breakNow == True:
+        if breakNow:
                 print('closing, please wait few seconds for terminal..')
                 break
 
-        if envPrint == True:
+        if envPrint:
                 print('Pressure, Humidity, Temperature, Dew_point, PM1, PM2.5, PM10, CPU, Latitude, Longitude, Altitude, Gradients')
                 print(validated_data, validated_gradients)
                 envPrint = False
@@ -815,7 +810,7 @@ if camera_type == 'picamera_noaddons':
                 time.sleep(DISARMED_REFRESH_RATE_S)
                 
 
-        if breakNow == True:
+        if breakNow:
                 print('closing, please wait few seconds for terminal..')
                 break
         

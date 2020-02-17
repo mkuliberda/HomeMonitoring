@@ -93,13 +93,13 @@ class pmsA003():
 
         d['time'] = datetime.datetime.now()
 
-        if self.pm_valid[0] == True:
+        if self.pm_valid[0]:
             d['pm1.0'] = self.data[10] * 256 + self.data[11]
 
-        if self.pm_valid[1] == True:
+        if self.pm_valid[1]:
             d['pm2.5'] = self.data[12] * 256 + self.data[13]
 
-        if self.pm_valid[2] == True:
+        if self.pm_valid[2]:
             d['pm10.0'] = self.data[14] * 256 + self.data[15]
 
         return d
@@ -110,13 +110,13 @@ class pmsA003():
 
         d[0] = datetime.datetime.now()
 
-        if self.pm_valid[0] == True:
+        if self.pm_valid[0]:
             d[1] = self.data[10] * 256 + self.data[11]
         
-        if self.pm_valid[1] == True:
+        if self.pm_valid[1]:
             d[2] = self.data[12] * 256 + self.data[13]
         
-        if self.pm_valid[2] == True:
+        if self.pm_valid[2]:
             d[3] = self.data[14] * 256 + self.data[15]
 
         return d
