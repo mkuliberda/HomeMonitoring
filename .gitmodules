@@ -1,0 +1,3 @@
+[submodule "Scheduler"]
+	path = Scheduler
+	url = https://github.com/mkuliberda/Scheduler.git

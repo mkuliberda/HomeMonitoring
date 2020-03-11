@@ -41,6 +41,7 @@ import tty
 import termios
 import http.server
 import socketserver
+import subprocess
 
 #TODO: move all the configs to JSON
 
@@ -61,6 +62,7 @@ validated_gradients = {'Pressure' : 0.0, 'Humidity' : 0.0, 'Temperature' : 0.0}
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
+MAC_ADDRESS = {'4A_Mateusz' : '4c:49:e3:d7:60:1b', 'P8_Asia' : '48:3c:0c:ac:19:56','MBPro_Asia' : '60:03:08:94:85:2c', 'Yoga_Mateusz' : '30:52:cb:e9:fc:03'}
 
 #Paths
 OBJECTDETECTION_PATH = '/home/pi/tensorflow1/models/research/object_detection'
@@ -460,9 +462,33 @@ def createPlots(event):
                         event.clear()
                         break
 
+class wifiScannerThread(threading.Thread):
+        def __init__(self, _search_items):
+                self._mac_addresses = _search_items
+                self._running = True
+                self._household_member_found = False
 
- 
-                              
+                self._scan()
+                threading.Thread.__init__(self)
+
+        def _scan(self):
+                result = subprocess.check_output("sudo arp-scan -l", shell=True).decode()
+                self._household_member_found = False
+                for mac in self._mac_addresses:
+                        if self._mac_addresses[mac] in result:
+                                self._household_member_found = True
+
+        def run(self):
+                while self._running:
+                        self._scan()
+                        time.sleep(30)
+        
+        def is_familiar_device_in_range(self):
+                return self._household_member_found
+                
+        def terminate(self):
+                self._running = False
+                               
 
 
 #create breaker thread for exit from camera loop
@@ -505,7 +531,6 @@ def waitForKeyPress():
 breakerThread = Thread(target = waitForKeyPress)
 #Start Thread
 breakerThread.start()
-
 
 #Instantiate cooler object for fan control
 cooler = cooling(FAN)            
@@ -620,6 +645,9 @@ if camera_type == 'picamera_env':
     plotsThread.daemon = True
     plotsThread.start()
 
+    #Start separate thread for wifi scanner
+    wifi_scanner = wifiScannerThread(MAC_ADDRESS)
+    wifi_scanner.start()
         
 
     for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
@@ -635,7 +663,8 @@ if camera_type == 'picamera_env':
                 plottingEvent.set()
                 collector.setConsumed()
 
-        if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_ctrl['mode'] == 'SCHEDULED') or detector_ctrl['mode'] == 'FORCE_ON':
+        # TODO: implement scheduler here
+        if (int(now.hour) >= SCHEDULE_ON and int(now.hour) < SCHEDULE_OFF and now.weekday() != 5 and now.weekday() != 6 and detector_ctrl['mode'] == 'SCHEDULED' and wifi_scanner.is_familiar_device_in_range() == False) or detector_ctrl['mode'] == 'FORCE_ON':
 
                 with lock:
                         detector_ctrl['armed'] = True
@@ -737,6 +766,11 @@ if camera_type == 'picamera_env':
     collector.join(35)
     del collector
     print('collector off')
+
+    wifi_scanner.terminate()
+    wifi_scanner.join(35)
+    del wifi_scanner
+    print('wifi scanner off')
 
     notifications.terminate()
     notifications.join(15)
