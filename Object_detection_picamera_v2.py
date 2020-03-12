@@ -62,7 +62,9 @@ validated_gradients = {'Pressure' : 0.0, 'Humidity' : 0.0, 'Temperature' : 0.0}
 SCHEDULE_ON = 9
 SCHEDULE_OFF = 16
 AQI_SENS_DEV_ADDRESS = '/dev/ttyS0'
-MAC_ADDRESS = {'4A_Mateusz' : '4c:49:e3:d7:60:1b', 'P8_Asia' : '48:3c:0c:ac:19:56','MBPro_Asia' : '60:03:08:94:85:2c', 'Yoga_Mateusz' : '30:52:cb:e9:fc:03'}
+TRUSTED_DEVICES = {'REDMI_4A' : '4c:49:e3:d7:60:1b', 'P8_Lite' : '48:3c:0c:ac:19:56',
+                'GR_MBPro' : '60:03:08:94:85:2c', 'Yoga_710' : '30:52:cb:e9:fc:03',
+                'GDNLPAV398': 'b8:08:cf:86:36:8e'}
 
 #Paths
 OBJECTDETECTION_PATH = '/home/pi/tensorflow1/models/research/object_detection'
@@ -646,7 +648,7 @@ if camera_type == 'picamera_env':
     plotsThread.start()
 
     #Start separate thread for wifi scanner
-    wifi_scanner = wifiScannerThread(MAC_ADDRESS)
+    wifi_scanner = wifiScannerThread(TRUSTED_DEVICES)
     wifi_scanner.start()
         
 
